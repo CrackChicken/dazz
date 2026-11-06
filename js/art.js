@@ -296,51 +296,58 @@
 
   /* ---------- Looks ---------- */
   // Liefert Zeichenoptionen für einen Look. pal = Farbpalette aus CSS.
+  function soft(pal, col, t) {
+    const a = /^#[0-9a-f]{6}$/i.test(col) ? parseInt(col.slice(1), 16) : null, b = /^#[0-9a-f]{6}$/i.test(pal.paper) ? parseInt(pal.paper.slice(1), 16) : null;
+    if (a == null || b == null) return pal.paper2;
+    const ch = sh => Math.round(((a >> sh) & 255) * t + ((b >> sh) & 255) * (1 - t));
+    return `rgb(${ch(16)},${ch(8)},${ch(0)})`;
+  }
   function looks(look, pal, base) {
     const o = Object.assign({ fill: pal.paper, color: base || pal.pencil }, {});
+    const m = pal.m || {};
+    const tintC = soft(pal, o.color, 0.35);
     switch (look) {
       case 'hero':
-        o.color = pal.ink; o.front = (c, j) => headband(c, j, pal.gold, true); break;
+        o.color = pal.ink; o.behind = (c, j) => cape(c, j, m.red || pal.red); o.front = (c, j) => headband(c, j, pal.gold, true); break;
       case 'brawler':
-        o.front = (c, j) => headband(c, j, o.color, false); break;
+        o.front = (c, j) => headband(c, j, m.red || o.color, false); break;
       case 'sword':
         o.hand = (c, j) => sword(c, j, j.h * 0.34); break;
       case 'archer':
         o.front = (c, j) => ponytail(c, j); o.hand = (c, j) => bow(c, j, j.h * 0.2); break;
       case 'spear':
-        o.front = (c, j) => cap(c, j, pal.paper); o.hand = (c, j) => spear(c, j, j.h * 0.7); break;
+        o.front = (c, j) => cap(c, j, tintC); o.hand = (c, j) => spear(c, j, j.h * 0.7); break;
       case 'ninja':
         o.headFill = o.color; o.face = false;
-        o.front = (c, j) => { mask(c, j, pal.ink, pal.paper); headband(c, j, pal.red, true); };
+        o.front = (c, j) => { mask(c, j, pal.ink, pal.paper); headband(c, j, m.red || pal.red, true); };
         o.hand = (c, j) => sword(c, j, j.h * 0.22); break;
       case 'mage':
-        o.front = (c, j) => { hatCone(c, j, pal.paper); beard(c, j); };
+        o.front = (c, j) => { hatCone(c, j, tintC); beard(c, j); };
         o.hand = (c, j) => staff(c, j, j.h * 0.6, j.h * 0.06, pal.gold); break;
       case 'knight':
-        o.front = (c, j) => helmet(c, j, pal.paper2); o.behind = (c, j) => shield(c, j, j.h * 0.14, pal.paper2);
+        o.front = (c, j) => helmet(c, j, tintC); o.behind = (c, j) => shield(c, j, j.h * 0.14, tintC);
         o.hand = (c, j) => sword(c, j, j.h * 0.32); break;
       case 'samurai':
-        o.front = (c, j) => hatKasa(c, j, pal.paper2); o.hand = (c, j) => sword(c, j, j.h * 0.4, true); break;
+        o.front = (c, j) => hatKasa(c, j, tintC); o.hand = (c, j) => sword(c, j, j.h * 0.4, true); break;
       case 'titan':
         o.bulky = true; o.mood = 'angry'; o.hand = (c, j) => club(c, j, j.h * 0.32); break;
       case 'chrono':
         o.front = (c, j) => halo(c, j, pal.ink); o.hand = (c, j) => staff(c, j, j.h * 0.55, j.h * 0.07, pal.paper2); break;
       case 'dragon':
-        o.behind = (c, j) => wings(c, j); o.front = (c, j) => horns(c, j); o.hand = (c, j) => spear(c, j, j.h * 0.62); break;
+        o.behind = (c, j) => { c.save(); c.fillStyle = tintC; wings(c, j); c.fill(); c.restore(); }; o.front = (c, j) => horns(c, j); o.hand = (c, j) => spear(c, j, j.h * 0.62); break;
       case 'god':
-        o.color = pal.gold;
-        o.front = (c, j) => { halo(c, j, pal.gold); crown(c, j, pal.paper); };
+        o.front = (c, j) => { halo(c, j, pal.gold); crown(c, j, tintC); };
         o.hand = (c, j) => staff(c, j, j.h * 0.6, j.h * 0.07, pal.gold); break;
       case 'robot':
-        o.square = true; o.front = (c, j) => antenna(c, j, pal.red); o.hand = (c, j) => club(c, j, j.h * 0.16, pal.paper2); break;
+        o.square = true; o.fill = tintC; o.front = (c, j) => antenna(c, j, m.red || pal.red); o.hand = (c, j) => club(c, j, j.h * 0.16, tintC); break;
       case 'shadow':
-        o.color = pal.ink; o.headFill = pal.ink; o.bulky = true; o.eyeColor = pal.red; o.mood = 'angry';
+        o.headFill = o.color; o.bulky = true; o.eyeColor = pal.gold; o.mood = 'angry';
         o.front = (c, j) => crown(c, j, pal.ink); o.hand = (c, j) => sword(c, j, j.h * 0.36, true); break;
       case 'star':
-        o.behind = (c, j) => cape(c, j, pal.paper2); o.front = (c, j) => star(c, j.head.x, j.head.y - j.head.r * 1.6, j.head.r * 0.7, pal.gold);
+        o.behind = (c, j) => cape(c, j, tintC); o.front = (c, j) => star(c, j.head.x, j.head.y - j.head.r * 1.6, j.head.r * 0.7, pal.gold);
         o.hand = (c, j) => sword(c, j, j.h * 0.34); break;
       case 'origin':
-        o.color = pal.ink; o.bulky = true; o.front = (c, j) => halo(c, j, pal.gold); o.hand = (c, j) => pen(c, j, j.h * 0.5, pal.gold); break;
+        o.bulky = true; o.front = (c, j) => halo(c, j, pal.gold); o.hand = (c, j) => pen(c, j, j.h * 0.5, pal.gold); break;
 
       // Arbeiter
       case 'gatherer': o.hand = (c, j) => { c.save(); c.fillStyle = pal.gold; c.beginPath(); c.arc(j.hand1.x, j.hand1.y, j.h * 0.05, 0, TAU); c.fill(); c.stroke(); c.restore(); }; break;
@@ -389,7 +396,7 @@
     const ctx = canvas.getContext('2d');
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     ctx.clearRect(0, 0, w, h);
-    const o = looks(look, pal, opts && opts.locked ? pal.rule : pal.pencil);
+    const o = looks(look, pal, opts && opts.locked ? pal.rule : (opts && opts.color) || pal.pencil);
     if (opts && opts.locked) { o.hand = null; o.front = null; o.behind = null; o.color = pal.rule; }
     if (opts && opts.ink) o.color = pal.ink;
     const pose = look === 'archer' ? POSES.aim : look === 'mage' || look === 'god' || look === 'chrono' ? POSES.cast :
@@ -397,6 +404,6 @@
     stick(ctx, w * 0.5, h * 0.94, h * 0.7, pose, Object.assign(o, { dir: 1, lw: Math.max(1.4, h * 0.04) }));
   }
 
-  const ART = { TAU, POSES, mix, breathe, stick, looks, enemyLook, portrait, star, line };
+  const ART = { TAU, POSES, mix, breathe, stick, looks, enemyLook, portrait, star, line, soft };
   root.KK_ART = ART;
 })(typeof window !== 'undefined' ? window : globalThis);

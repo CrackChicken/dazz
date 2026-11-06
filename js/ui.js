@@ -19,6 +19,9 @@
   let lastStageKey = '';
   let campT = 0;
   const campParts = [];
+  let shownGold = 0, lastHud = 0, lastCombo = 0;
+  const modalQueue = [];
+  const mcol = name => `var(--m-${name})`;
 
   /* ---------- Hilfen ---------- */
   function setText(node, txt) { if (node && node._t !== txt) { node._t = txt; node.textContent = txt; } }
@@ -37,6 +40,7 @@
 
   function modal(opts) {
     const m = $('modal');
+    if (!m.hidden) { modalQueue.push(opts); return () => {}; }
     $('mTitle').textContent = opts.title || '';
     const body = $('mBody'); body.innerHTML = '';
     if (typeof opts.body === 'string') body.innerHTML = opts.body; else if (opts.body) body.appendChild(opts.body);
@@ -47,7 +51,7 @@
       b.addEventListener('click', () => { close(); if (a.onClick) a.onClick(); });
       act.appendChild(b);
     }
-    function close() { m.hidden = true; if (opts.onClose) opts.onClose(); }
+    function close() { m.hidden = true; if (opts.onClose) opts.onClose(); if (modalQueue.length) setTimeout(() => modal(modalQueue.shift()), 120); }
     m.hidden = false;
     const first = act.querySelector('button'); if (first) setTimeout(() => first.focus(), 30);
     return close;
@@ -83,7 +87,8 @@
     const btn = el('button', 'buy'); btn.type = 'button';
     const bq = el('span', 'bq'), bc = el('span', 'bc'); btn.append(bq, bc);
     r.append(c, info, btn);
-    const o = { r, c, nm, lv, stat, desc, msi, btn, bq, bc, kind, item, look: item ? item.look : 'hero', drawn: '' };
+    const o = { r, c, nm, lv, stat, desc, msi, btn, bq, bc, kind, item, look: item ? item.look : 'hero', drawn: '', color: item ? item.color : 'blue', could: false };
+    r.style.setProperty('--c', mcol(o.color));
     holdButton(btn, () => {
       if (kind === 'hero') A.buyHero(); else if (kind === 'fighter') A.buyFighter(item.id); else A.buyWorker(item.id);
     });
@@ -103,7 +108,7 @@
     const key = (locked ? 'L' : 'U') + pal.paper + pal.ink + o.c.clientWidth;
     if (o.drawn === key || !o.c.clientWidth) return;
     o.drawn = key;
-    ART.portrait(o.c, o.look, pal, { locked, ink: o.kind === 'hero' });
+    ART.portrait(o.c, o.look, pal, { locked, ink: o.kind === 'hero', color: pal.m && pal.m[o.color] });
   }
 
   function buildBuybars() {
@@ -133,12 +138,12 @@
     const bar = $('skills'); bar.innerHTML = '';
     const list = $('skillList'); list.innerHTML = '';
     for (const k of D.skills) {
-      const b = el('button', 'skill'); b.type = 'button'; b.dataset.id = k.id;
+      const b = el('button', 'skill'); b.type = 'button'; b.dataset.id = k.id; b.style.setProperty('--c', mcol(k.color));
       b.setAttribute('aria-label', `${k.name}: ${k.desc}`);
       b.innerHTML = `<span class="cd"></span><svg viewBox="0 0 24 24" aria-hidden="true">${ICONS[k.id]}</svg><span class="key">${k.key}</span><span class="lock">Lv ${k.unlock}</span>`;
       b.addEventListener('click', () => A.useSkill(k.id));
       bar.appendChild(b);
-      const r = el('div', 'sk-row'); r.dataset.id = k.id;
+      const r = el('div', 'sk-row'); r.dataset.id = k.id; r.style.setProperty('--c', mcol(k.color));
       r.innerHTML = `<svg viewBox="0 0 24 24" aria-hidden="true">${ICONS[k.id]}</svg><div><div>${k.name}</div><div class="sd">${k.desc}</div></div><div class="su"></div>`;
       list.appendChild(r);
     }
@@ -178,6 +183,7 @@
       });
     };
     seg('setSound', 'sound', v => v === '1');
+    seg('setMusic', 'music', v => v === '1');
     seg('setSci', 'sci', v => v === '1');
     seg('setTheme', 'theme', v => v);
     $('btnExport').addEventListener('click', () => {
@@ -212,16 +218,21 @@
   function renderSettings() {
     const mark = (id, v) => $(id).querySelectorAll('button').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.v === v)));
     mark('setSound', S().settings.sound ? '1' : '0');
+    mark('setMusic', S().settings.music ? '1' : '0');
     mark('setSci', S().settings.sci ? '1' : '0');
     mark('setTheme', S().settings.theme || 'auto');
-    $('btnSound').setAttribute('aria-pressed', String(!!S().settings.sound));
-    $('btnSound').setAttribute('aria-label', S().settings.sound ? 'Ton aus' : 'Ton an');
+    const any = !!(S().settings.sound || S().settings.music);
+    $('btnSound').setAttribute('aria-pressed', String(any));
+    $('btnSound').setAttribute('aria-label', any ? 'Ton und Musik aus' : 'Ton und Musik an');
   }
 
   /* ---------- Aktualisieren ---------- */
   function hud(now) {
     const s = S();
-    setText($('hudGold'), fmt(s.gold));
+    const dt = lastHud ? Math.min(0.5, (now - lastHud) / 1000) : 1; lastHud = now;
+    if (!(shownGold <= s.gold) || s.gold - shownGold < s.gold * 0.002) shownGold = s.gold;
+    else shownGold += (s.gold - shownGold) * Math.min(1, dt * 9);
+    setText($('hudGold'), fmt(shownGold));
     const passive = E.workerIncome(s, now) + E.idleCombat(s).gold;
     setText($('hudGps'), '+' + fmt(passive, { decimals: true }) + ' /s');
     setText($('hudLv'), String(s.level));
@@ -237,7 +248,7 @@
       setText($('stNum'), String(s.stage));
       const pips = $('stPips');
       if (s.stage < s.maxStage) setHTML(pips, '<span class="farm">geschafft · farmen</span>');
-      else if (E.isBoss(s.stage)) setHTML(pips, '<span class="farm">Bossstufe</span>');
+      else if (E.isBoss(s.stage)) setHTML(pips, `<span class="bossy">${E.isMega(s.stage) ? 'MEGA-BOSS' : 'BOSS'}</span>`);
       else { let h = ''; for (let i = 0; i < B.killsPerStage; i++) h += `<i class="${i < s.kills ? 'on' : ''}"></i>`; setHTML(pips, h); }
       setDisabled($('stPrev'), s.stage <= 1);
       setDisabled($('stNext'), s.stage >= s.maxStage);
@@ -252,9 +263,37 @@
     bb.hidden = !showBoss;
     if (showBoss) {
       const tot = E.bossDuration(s);
+      setText($('bossName'), e.name);
+      toggle(bb, 'mega', e.mega);
+      toggle(bb, 'urgent', s.bossTime < 8);
+      $('bossHp').style.width = Math.max(0, e.hp / e.maxHp * 100).toFixed(1) + '%';
+      setText($('bossHpText'), fmt(Math.max(0, e.hp)));
       $('bossFill').style.width = Math.max(0, s.bossTime / tot * 100).toFixed(1) + '%';
       setText($('bossTime'), Math.max(0, s.bossTime).toFixed(1) + ' s');
     }
+    // Combo
+    const cb = $('combo');
+    const showC = s.combo >= 3;
+    if (cb.hidden === showC) cb.hidden = !showC;
+    if (showC) {
+      setText($('comboN'), String(s.combo));
+      setText($('comboX'), '×' + E.comboMult(s).toFixed(2).replace('.', ','));
+      $('comboBar').style.width = Math.max(0, s.comboT / B.comboWindow * 100).toFixed(0) + '%';
+      const tier = s.combo >= B.comboMax ? 't4' : s.combo >= 100 ? 't3' : s.combo >= 50 ? 't2' : 't1';
+      if (cb._tier !== tier) { cb.classList.remove('t1', 't2', 't3', 't4'); cb.classList.add(tier); cb._tier = tier; }
+      if (s.combo !== lastCombo) { cb.classList.remove('pop'); void cb.offsetWidth; cb.classList.add('pop'); }
+    }
+    lastCombo = s.combo;
+    // Buffs
+    const chips = [];
+    const chip = (label, left, color) => chips.push(`<span class="chip" style="--c:var(--m-${color})">${label} ${Math.ceil(left)}s</span>`);
+    const sr = E.skillState(s, 'rage', now), sg = E.skillState(s, 'goldrush', now), sc = E.skillState(s, 'clones', now);
+    if (sr.active) chip('Wut ×2', sr.left, 'red');
+    if (sg.active) chip('Gold ×3', sg.left, 'yellow');
+    if (sc.active) chip('Klone', sc.left, 'purple');
+    if (E.buff(s, 'frenzy', now)) chip('Raserei ×3', (s.buffs.frenzy - now) / 1000, 'orange');
+    if (E.buff(s, 'clickstorm', now)) chip('Klicksturm ×5', (s.buffs.clickstorm - now) / 1000, 'blue');
+    setHTML($('buffs'), chips.join(''));
     if (!$('btnBoss').hidden && showBoss) $('btnBoss').hidden = true;
     setText($('dpsTag'), 'DPS ' + fmt(E.totalDps(s, now)));
 
@@ -323,6 +362,9 @@
     if (!show) return;
     can = s.gold >= price.cost;
     toggle(o.r, 'locked', locked);
+    o.btn.style.setProperty('--p', (can ? 100 : Math.min(100, s.gold / price.cost * 100)).toFixed(1) + '%');
+    if (can && !o.could && !locked) { o.btn.classList.remove('fresh'); void o.btn.offsetWidth; o.btn.classList.add('fresh'); }
+    o.could = can;
     setText(o.bq, lvl > 0 || o.kind === 'hero' ? '+' + price.n : price.n > 1 ? 'Kaufen ' + price.n : 'Kaufen');
     setText(o.bc, fmt(price.cost));
     setDisabled(o.btn, !can);
@@ -476,7 +518,7 @@
       const ph = (campT * 1.6 + i * 0.37) % 1;
       const k = ph < 0.5 ? ph * 2 : 2 - ph * 2;
       const pose = ART.mix(ART.POSES.idle, ART.POSES.work, k);
-      const o = ART.looks(wk.look, pal, pal.pencil);
+      const o = ART.looks(wk.look, pal, (pal.m && pal.m[wk.color]) || pal.pencil);
       o.dir = i % 2 ? -1 : 1;
       ART.stick(ctx, x, g, h * 0.62, pose, o);
       if (ph < 0.02 && Math.random() < 0.5 && campParts.length < 30) campParts.push({ x, y: g - h * 0.5, vy: -40, t: 0 });
@@ -518,11 +560,24 @@
       case 'bossFail':
         toast('Boss zu stark – erst aufrüsten!');
         break;
-      case 'buy':
-        if (ev.first) {
-          const o = ev.kind === 'fighter' ? rows.fighters[ev.id] : null;
-          if (o) { o.r.classList.remove('new'); void o.r.offsetWidth; o.r.classList.add('new'); }
+      case 'buy': {
+        const o = ev.kind === 'fighter' ? rows.fighters[ev.id] : ev.kind === 'worker' ? rows.workers[ev.id] : rows.hero;
+        if (ev.first && o) { o.r.classList.remove('new'); void o.r.offsetWidth; o.r.classList.add('new'); }
+        if (ev.milestone && o) {
+          o.r.classList.remove('ms-hit'); void o.r.offsetWidth; o.r.classList.add('ms-hit');
+          const name = ev.kind === 'hero' ? 'Held' : o.item.name;
+          toast(ev.kind === 'worker' ? `${name}: Einkommen ×2!` : ev.kind === 'hero' ? 'Held: Klick ×2!' : `${name}: Schaden ×${B.fighterMilestoneMult}!`, 'green');
         }
+        break;
+      }
+      case 'planeCatch':
+        toast({ gold: 'Goldflieger: Gold!', jackpot: 'Goldflieger: JACKPOT!', frenzy: 'Raserei: ×3 DPS für 30 s', clickstorm: 'Klicksturm: ×5 Klick für 20 s', cooldown: 'Alle Fähigkeiten wieder bereit!' }[ev.kind], 'gold');
+        break;
+      case 'chest':
+        if (ev.roll >= 10) setTimeout(() => toast('JACKPOT! ×10 Boss-Beute', 'gold'), 900);
+        break;
+      case 'comboEnd':
+        if (ev.n >= 50) toast(`Combo ${ev.n} beendet`, 'purple');
         break;
       case 'kill': {
         const g = $('hudGoldBox'); g.classList.remove('bump'); void g.offsetWidth; g.classList.add('bump');
@@ -530,6 +585,19 @@
       }
     }
     void s;
+  }
+
+  function showDaily(res, onClose) {
+    let days = '';
+    for (let i = 1; i <= 7; i++) {
+      const cls = i < res.day ? 'done' : i === res.day ? 'today' : '';
+      days += `<div class="${cls}"><b>${i}</b>${i === 7 ? '×4' : '×' + (1 + 0.5 * (i - 1)).toString().replace('.', ',')}</div>`;
+    }
+    modal({
+      title: res.streak > 1 ? `Tag ${res.streak} in Folge!` : 'Tagesbonus',
+      body: `<p>Schön, dass du da bist. Komm jeden Tag wieder, dann wächst der Bonus.</p><div class="days">${days}</div><p class="bigline">+${fmt(res.gold)} Gold</p>`,
+      actions: [{ label: 'Einsammeln', onClick: onClose }]
+    });
   }
 
   function setPalette(p) { pal = p; for (const k in rows.fighters) rows.fighters[k].drawn = ''; for (const k in rows.workers) rows.workers[k].drawn = ''; if (rows.hero) rows.hero.drawn = ''; }
@@ -549,11 +617,14 @@
         actions: [{ label: 'Noch nicht', kind: 'ghost' }, { label: 'Aufsteigen', onClick: () => A.ascend() }]
       });
     });
-    $('btnSound').addEventListener('click', () => { A.setSetting('sound', !S().settings.sound); renderSettings(); });
+    $('btnSound').addEventListener('click', () => {
+      const on = !(S().settings.sound || S().settings.music);
+      A.setSetting('sound', on); A.setSetting('music', on); renderSettings();
+    });
     renderSettings();
   }
 
   function rebuild() { lastStageKey = ''; update(Date.now(), true); renderSettings(); }
 
-  root.KK_UI = { init, update, hud, toast, modal, modalOpen, onEvent, showTab, setPalette, campFrame, rebuild, renderMore, get tab() { return curTab; } };
+  root.KK_UI = { init, update, hud, toast, modal, modalOpen, onEvent, showDaily, showTab, setPalette, campFrame, rebuild, renderMore, get tab() { return curTab; } };
 })(window);

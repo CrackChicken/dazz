@@ -1,18 +1,22 @@
 # Kritzelkrieg – Stickman Idle
 
-Ein Idle-Clicker-Webspiel mit Strichmännchen, gezeichnet wie im Schulheft. Läuft im Browser auf **iPhone/iPad (Safari)** und **PC/Mac** – ohne Installation, ohne Build-Schritt, ohne Server-Code.
+Ein Idle-Clicker-Webspiel mit Strichmännchen, gezeichnet wie mit Filzstiften im Schulheft (im dunklen Modus mit bunter Kreide auf der Tafel). Läuft im Browser auf **iPhone/iPad (Safari)** und **PC/Mac** – ohne Installation, ohne Build-Schritt, ohne Server-Code.
 
 ## Spielprinzip
 
 - **Klicken / Tippen:** Tippe auf die Arena, dein Held schlägt zu. Mehrere Finger zählen einzeln, kritische Treffer machen Extraschaden.
+- **Combo:** Schnell hintereinander tippen baut eine Combo auf, bis zu doppeltem Klickschaden bei Combo 150.
 - **Kämpfer (16 Typen):** Raufbold, Schwertkämpfer, Bogenschützin, Ninja, Tintenmagier, Ritter, Samurai, Drachenreiter, Stiftgott und mehr. Sie kämpfen automatisch, jeder mit eigener Waffe und Angriffsanimation. Alle 25 Level verdreifacht sich ihr Schaden.
 - **Passives Einkommen:** Im **Lager** arbeiten 10 Arten von Strichmännchen (Sammler bis Tintenfabrik) und verdienen Gold pro Sekunde. Ihr Ruhm-Bonus wächst mit jeder Stufe, die deine Truppe erreicht. Bei Meilensteinen (10, 25, 50, 100 … Stück) verdoppelt sich ihr Einkommen.
 - **Offline-Fortschritt:** Kämpfer und Arbeiter verdienen weiter, während du weg bist (50 %, bis zu 12 Stunden; mit dem Talent „Träumer“ bis 100 %).
-- **Stufen & Bosse:** 10 Gegner pro Stufe, jede 5. Stufe ein Boss mit Zeitlimit. Alle 10 Stufen beginnt ein neues Kapitel mit eigener Kulisse (Wiese, Wüste, Gebirge, Vulkan, Burg, Friedhof, Weltall).
+- **Stufen & Monster:** 10 Gegner pro Stufe. Alle 10 Stufen beginnt ein neues Kapitel mit eigener Kulisse, eigenen Monstern (Schleim, Pilz, Goblin, Fledermaus, Teufelchen, Skelett, Geist, Alien) und eigener Musik.
+- **Bosse:** Jede 5. Stufe ein Boss mit Intro und Zeitlimit: Zyklop, Riesenspinne, Kieselgolem, Tintenkrake, Feuerdrache, Knochenkönig, Hydra und Robo-Radierer. Sie greifen an (Feueratem, Laser, Giftbiss, Erdbeben …). Jede 25. Stufe kommt ein Mega-Boss: der Urdrache.
+- **Belohnungen:** Jeder Boss lässt eine Truhe fallen (×2 bis ×10 Beute, mit Jackpot). Ab und zu fliegt ein goldener Papierflieger durch die Arena: antippen für Gold, Raserei, Klicksturm, Jackpot oder sofort bereite Fähigkeiten. Jeden Tag gibt es einen Tagesbonus, der mit jedem Tag in Folge wächst.
 - **Level-System:** Besiegte Gegner geben EP. Jedes Level bringt ×1,03 auf Gold und Schaden und einen Talentpunkt für 9 Talente (Klickkraft, DPS, Gier, Krit-Chance, Synergie …).
 - **Fähigkeiten:** Wutanfall (doppelter Schaden), Goldrausch (dreifaches Gold), Schattenklone (Auto-Klicks), Tintenmeteor (Sofortschaden) – freigeschaltet über das Level.
 - **Aufstieg (Prestige):** Ab Stufe 40 kannst du neu anfangen und bekommst Seelen. Jede Seele gibt dauerhaft +10 % auf alles. Level, Talente und Erfolge bleiben.
-- **29 Erfolge:** jeder gibt +2 % auf alles.
+- **36 Erfolge:** jeder gibt +2 % auf alles.
+- **Sound:** Eigener Soundtrack pro Kapitel und ein treibender Boss-Track, live per WebAudio erzeugt, dazu Effekte für Treffer, Münzen (mit steigender Tonhöhe), Level-Ups, Truhen und Bosse. Musik und Effekte lassen sich getrennt abschalten.
 - **Exponentielles Wachstum:** Zahlen laufen von 1 bis weit über Dezillionen (K, M, B, T, Qa, Qi … oder wissenschaftliche Schreibweise).
 
 ## Steuerung
@@ -47,9 +51,11 @@ js/data.js            Alle Inhalte und Balancing-Konstanten
 js/engine.js          Spiellogik ohne DOM (auch in Node lauffähig)
 js/format.js          Zahlen- und Zeitformat
 js/art.js             Strichmännchen-Zeichner: Posen, Waffen, Accessoires
-js/arena.js           Kampfszene auf Canvas: Animationen, Projektile, Partikel
+js/monsters.js        Monster und Bosse (Drache, Krake, Hydra …) mit Angriffsanimationen
+js/arena.js           Kampfszene auf Canvas: Kulissen, Boss-Intros, Projektile, Truhen, Partikel
+js/fx.js              Effekt-Ebene: Münzen fliegen in den Goldzähler, Konfetti
 js/ui.js              Listen, Talente, Aufstieg, Erfolge, Einstellungen, Dialoge
-js/audio.js           Synthetisierte Soundeffekte (WebAudio, keine Dateien)
+js/audio.js           Soundeffekte und prozeduraler Soundtrack (WebAudio, keine Dateien)
 js/cloud.js           Optionaler Cloud-Spielstand (nur als claude.ai-Artifact)
 js/main.js            Start, Spielschleife, Eingabe, Speichern, Offline-Fortschritt
 sw.js, manifest.webmanifest, icons/   PWA (Homescreen, offline)
@@ -67,7 +73,7 @@ node tools/simulate.js 6 4 5     # 6 Stunden, 4 Taps/s, bis zu 5 Aufstiege
 QUIET=1 KK_BAL='{"enemyGrowth":1.55}' node tools/simulate.js 3 4 0   # Variante testen
 ```
 
-Mit den aktuellen Werten (aktiver Spieler, optimal kaufend): Stufe 40 nach ~7 min, Stufe 60 nach ~18 min, erster Aufstieg nach ~50 min bei Stufe ~75. Danach Läufe von 35–50 min mit jeweils +15 bis +50 Stufen.
+Mit den aktuellen Werten (Bot: 4 Taps/s, optimal kaufend; echte Spieler brauchen etwa doppelt so lange): erstes Upgrade nach ~7 s, Stufe 10 nach ~1,5 min, Stufe 40 nach ~20 min, Stufe 60 nach knapp 1 h, erster Aufstieg nach ~1,5 h bei Stufe ~65. Danach Läufe von 25–45 min mit jeweils +15 bis +45 Stufen.
 
 ## Lizenz
 

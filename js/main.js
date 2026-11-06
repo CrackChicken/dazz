@@ -1,7 +1,7 @@
 /* Kritzelkrieg – Start, Spielschleife, Eingabe, Speichern. */
 (function (root) {
   'use strict';
-  const E = root.KK, FMT = root.KK_FMT, AR = root.KK_ARENA, UI = root.KK_UI, AU = root.KK_AUDIO, CL = root.KK_CLOUD;
+  const E = root.KK, FMT = root.KK_FMT, AR = root.KK_ARENA, UI = root.KK_UI, AU = root.KK_AUDIO, CL = root.KK_CLOUD, FX = root.KK_FX;
   const KEY = 'kritzelkrieg-save-v1';
   let state = null;
   let lastFrame = 0, hudAcc = 0, uiAcc = 0, saveAcc = 0, cloudAcc = 0;
@@ -49,12 +49,29 @@
     refreshPalette();
   }
 
+  function applyAudio() {
+    if (state.settings.music === undefined) state.settings.music = true;
+    AU.setSfx(state.settings.sound);
+    AU.setMusic(state.settings.music);
+  }
+  function wantTrack() {
+    const e = state.enemy;
+    return e && e.boss && e.hp > 0 ? 'boss' : 'z' + E.zoneIndex(state.stage);
+  }
+  function daily() {
+    const res = E.claimDaily(state, Date.now());
+    if (!res) return;
+    state._ev = state._ev.filter(ev => ev.t === 'ach');
+    UI.showDaily(res, () => { AU.play('daily'); const b = document.getElementById('hudGoldBox').getBoundingClientRect(); FX.coins(b.left + 40, b.top + 120, 12, true); });
+    saveLocal();
+  }
+
   /* ---------- Zustand ersetzen ---------- */
   function replaceState(s) {
     state = s;
     AR.reset();
     FMT.setSci(state.settings.sci);
-    AU.setEnabled(state.settings.sound);
+    applyAudio();
     applyTheme();
     UI.rebuild();
     saveLocal();
@@ -96,15 +113,18 @@
   function sound(ev) {
     switch (ev.t) {
       case 'tap': if (ev.dmg > 0) AU.play('hit', ev.crit); break;
-      case 'kill': AU.play('kill'); AU.play('coin'); break;
-      case 'spawn': if (ev.boss) AU.play('boss'); break;
+      case 'kill': AU.play('kill'); break;
+      case 'spawn': if (ev.boss) AU.play('roar'); break;
+      case 'plane': AU.play('plane'); break;
+      case 'planeCatch': AU.play('planeCatch'); break;
+      case 'combo': if (ev.n >= 25) AU.play('combo', ev.n); break;
       case 'level': AU.play('level'); break;
       case 'skill': AU.play('skill'); break;
       case 'meteor': AU.play('meteor'); break;
       case 'bossFail': AU.play('fail'); break;
       case 'ach': AU.play('ach'); break;
       case 'ascend': AU.play('ascend'); break;
-      case 'buy': AU.play('buy'); break;
+      case 'buy': AU.play(ev.milestone ? 'milestone' : 'buy'); break;
     }
   }
   function drain() {
@@ -127,7 +147,9 @@
     stepSim(now);
     drain();
     AR.frame(dt, now);
+    FX.frame(dt);
     UI.campFrame(dt);
+    AU.setTrack(wantTrack());
     hudAcc += dt; if (hudAcc >= 0.066) { hudAcc = 0; UI.hud(now); }
     uiAcc += dt; if (uiAcc >= 0.25) { uiAcc = 0; UI.update(now); }
     saveAcc += dt; if (saveAcc >= 10) { saveAcc = 0; saveLocal(); }
@@ -147,7 +169,7 @@
     setSetting(k, v) {
       state.settings[k] = v;
       if (k === 'sci') FMT.setSci(v);
-      if (k === 'sound') { AU.setEnabled(v); if (v) AU.unlock(); }
+      if (k === 'sound' || k === 'music') { applyAudio(); if (v) AU.unlock(); }
       if (k === 'theme') applyTheme();
       UI.update(Date.now(), true); UI.hud(Date.now());
       saveLocal();
@@ -189,7 +211,9 @@
     canvas.addEventListener('pointerdown', e => {
       e.preventDefault();
       const r = canvas.getBoundingClientRect();
-      attack(e.clientX - r.left, e.clientY - r.top);
+      const x = e.clientX - r.left, y = e.clientY - r.top;
+      if (AR.hitPlane(x, y)) { AU.unlock(); E.catchPlane(state, Date.now()); drain(); return; }
+      attack(x, y);
     });
     canvas.addEventListener('contextmenu', e => e.preventDefault());
     document.addEventListener('pointerdown', () => AU.unlock(), { once: true, capture: true });
@@ -214,8 +238,8 @@
     else root.addEventListener('resize', () => AR.resize());
 
     document.addEventListener('visibilitychange', () => {
-      if (document.visibilityState === 'hidden') { saveLocal(); saveCloud(); }
-      else cloudCheck();
+      if (document.visibilityState === 'hidden') { saveLocal(); saveCloud(); AU.suspend(); }
+      else { AU.resume(); cloudCheck(); setTimeout(daily, 600); }
     });
     root.addEventListener('pagehide', () => saveLocal());
 
@@ -264,9 +288,14 @@
     state = s || E.newState();
     bootSavedAt = state.savedAt || 0;
     FMT.setSci(state.settings.sci);
-    AU.setEnabled(state.settings.sound);
+    applyAudio();
     AR.init(canvas, () => state);
     pal = AR.readPalette();
+    FX.init(document.getElementById('fx'), document.querySelector('#hudGoldBox .coin'), () => {
+      const g = document.getElementById('hudGoldBox'); g.classList.remove('bump'); void g.offsetWidth; g.classList.add('bump');
+      AU.play('coin');
+    });
+    FX.setPalette(pal);
     UI.init(() => state, actions, pal);
     applyTheme();
     bindInput();
@@ -274,6 +303,7 @@
     UI.hud(Date.now());
     root.requestAnimationFrame(frame);
     cloudBoot();
+    setTimeout(daily, 900);
 
     try {
       const h = root.claude && root.claude.hot;

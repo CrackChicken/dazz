@@ -83,6 +83,7 @@ while (t < end) {
   tapAcc += DT * TAPS;
   while (tapAcc >= 1) { tapAcc--; E.tap(s, now, false); }
   for (const k of D.skills) E.useSkill(s, k.id, now);
+  if (s.plane && s.plane.t > 2 && !s.plane.tried) { s.plane.tried = true; if (Math.random() < 0.7) E.catchPlane(s, now); }
   const failsBefore = s.stats.bossFails;
   E.tick(s, DT, now);
   if (s.stats.bossFails > failsBefore) { bossFailDps = E.totalDps(s, null); bossFailAt = t; }
