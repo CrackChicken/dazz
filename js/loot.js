@@ -262,7 +262,7 @@
     root.KK_UI.modal({
       title: 'Wahrscheinlichkeiten',
       body: `<table class="rates"><thead><tr><th>Seltenheit</th><th>Wundertüte</th><th>Kaugummi</th></tr></thead><tbody>${rows}</tbody></table>
-        <p class="sub">Wundertüte: halb Items, halb Skins. Spätestens nach ${C.machines.pack.pity} Ziehungen ohne Legendär kommt garantiert Legendär oder besser. In jeder 10er-Tüte steckt mindestens ein „Sehr selten“. Doppelte Items steigen eine Stufe auf, danach und bei doppelten Skins gibt es Sternchen zurück. Alles wird nur mit Spielwährung bezahlt.</p>`,
+        <p class="sub">Wundertüte: halb Items, halb Skins. Spätestens nach ${C.machines.pack.pity} Ziehungen ohne Legendär kommt garantiert Legendär oder besser. In jeder 10er-Tüte steckt mindestens ein „Selten“ oder besser. Doppelte Items steigen eine Stufe auf, danach und bei doppelten Skins gibt es Sternchen zurück. Alles wird nur mit Spielwährung bezahlt.</p>`,
       actions: [{ label: 'OK' }]
     });
   }
@@ -284,7 +284,18 @@
     $('spinFree').textContent = ready ? 'Gratis drehen!' : 'Gratis in ' + FMT.dur((s.wheel.next - now) / 1000);
     $('spinFree').classList.toggle('hot', ready);
     $('spinPaid').disabled = s.stars < C.wheel.spinCost || wheelSpinning;
-    if (force) { if (sub === 'gear') renderGear(); if (sub === 'skins') renderSkins(); }
+    if (force) { if (sub === 'gear') renderGear(); if (sub === 'skins') renderSkins(); if (sub === 'shop') renderShop(); }
+  }
+  // Premium-Shop: reine Vorschau. Keine Preise, keine Zahlungsdaten, Kaufknöpfe deaktiviert.
+  function renderShop() {
+    const box = $('shop');
+    if (box._done) return;
+    box._done = true;
+    const ST = root.KK_STORE;
+    const cats = ST ? ST.catalog() : C.shop;
+    box.innerHTML = `<div class="shop-note">BALD VERFÜGBAR: Später nur kosmetische Inhalte über Apple In-App-Käufe (iOS) bzw. Steam (PC). Nichts davon macht stärker.</div>` +
+      cats.map(c => `<div class="shop-cat"><h4>${c.cat}</h4><div class="shop-grid">${c.items.map(it =>
+        `<div class="shop-card"><span class="soon">BALD VERFÜGBAR</span><b>${it.name}</b><span>${it.desc}</span><button type="button" class="btn" disabled aria-disabled="true">Bald verfügbar</button></div>`).join('')}</div></div>`).join('');
   }
   function showSub(name) {
     sub = name;

@@ -8,6 +8,8 @@
   let lastFrame = 0, hudAcc = 0, uiAcc = 0, saveAcc = 0, cloudAcc = 0;
   let cloudReady = false, cloudChecking = false, bootSavedAt = 0;
   let themeSetByUs = false, pal = null;
+  let menuOpen = false, pendingOffline = null, autoAcc = 0, lastRender = 0, perfAcc = 0, perfN = 0, perfSlow = 0, autoLow = false;
+  const pads = { prev: [] };
   const canvas = document.getElementById('arena');
 
   /* ---------- Speicher ---------- */
@@ -58,6 +60,25 @@
     AU.setMusic(state.settings.music);
     AU.setVolumes(state.settings.musicVol != null ? state.settings.musicVol : 0.8, state.settings.sfxVol != null ? state.settings.sfxVol : 0.9);
   }
+  // Grafik: Qualität (Auto misst die Bildzeit), Effektstärke, Wackeln, Zahlen
+  function applyGfx() {
+    const st = state.settings, q = st.gfx || 'auto';
+    const low = q === 'low' || (q === 'auto' && autoLow) || !!st.eco;
+    const base = q === 'high' ? 1.25 : q === 'med' ? 0.8 : low ? 0.45 : 1;
+    root.KK_GFX = { fx: Math.max(0, (st.fx == null ? 1 : st.fx) * base), shake: st.shake !== false, numbers: st.numbers !== false, low };
+    document.documentElement.classList.toggle('gfx-low', low);
+  }
+  function fpsCap() { const st = state.settings; if (st.eco) return 30; return st.fps == null ? 60 : st.fps; }
+  function perfSample(dt) {
+    if ((state.settings.gfx || 'auto') !== 'auto' || document.visibilityState !== 'visible') return;
+    perfAcc += dt; perfN++;
+    if (perfAcc < 3) return;
+    const avg = perfAcc / perfN; perfAcc = 0; perfN = 0;
+    const cap = fpsCap(), target = cap ? 1 / cap : 1 / 60;
+    if (avg > Math.max(target * 1.45, 0.026)) perfSlow++; else perfSlow = Math.max(0, perfSlow - 1);
+    const want = perfSlow >= 2 ? true : perfSlow === 0 ? false : autoLow;
+    if (want !== autoLow) { autoLow = want; applyGfx(); }
+  }
   // Haptik: Vibration, wo der Browser sie erlaubt (iOS Safari bietet Webseiten keine Vibration)
   function haptic(p) { try { if (state.settings.haptics && navigator.vibrate) navigator.vibrate(p); } catch (e) { /* optional */ } }
   function wantTrack() {
@@ -77,7 +98,7 @@
       if (ev.stage === 24) story('mega');
       if (ev.stage === 99) story('finale');
     }
-    if (ev.t === 'ascend' && state.ascensions === 1) setTimeout(() => story('newbook'), 400);
+    if (ev.t === 'ascend' && state.ascensions === 1) setTimeout(() => story('newbook'), 3400);
   }
   function starsPop(n) {
     const h = document.getElementById('hudStars');
@@ -112,21 +133,34 @@
     const lv = E.applyOffline(state, off);
     state._ev = [];
     if (off.gold <= 0 && off.xp <= 0) return;
-    const capped = off.seconds > off.used;
-    UI.modal({
-      title: 'Willkommen zurück!',
-      body: `<p>Du warst ${FMT.dur(off.seconds)} weg. Deine Strichmännchen haben weitergearbeitet:</p>
-        <p class="bigline">+${FMT.fmt(off.gold)} Gold</p>
-        <p>+${FMT.fmt(off.xp)} EP · ${FMT.fmt(off.kills)} Gegner besiegt${lv > 0 ? ` · <b>+${lv} Level</b>` : ''}</p>
-        <p class="sub">Offline-Effizienz ${Math.round(off.eff * 100)} %${capped ? `, gezählt werden höchstens ${E.B.offlineCapHours} Stunden` : ''}. Das Talent „Träumer“ erhöht sie.</p>`,
-      actions: [{ label: 'Einsammeln', onClick: () => AU.play('coin') }]
+    pendingOffline = { off, lv };
+    if (!menuOpen) showOffline();
+  }
+  function showOffline() {
+    if (!pendingOffline) return;
+    const { off, lv } = pendingOffline; pendingOffline = null;
+    UI.showOffline(off, lv, () => {
+      AU.play('coin');
+      const b = document.getElementById('hudGoldBox').getBoundingClientRect();
+      FX.coins(b.left + 40, b.top + 120, 10 + Math.min(14, (off.items || []).length * 2), true);
+      if ((off.items || []).some(r => r.rank >= 3)) AU.play('reveal', 4);
     });
+  }
+  // Zeitschutz: Offline-Zeit zählt nur ab dem spätesten je gesehenen Zeitpunkt.
+  // Stellt jemand die Uhr vor und wieder zurück, gibt es bis zum Einholen nichts doppelt.
+  function clockGuard(now) {
+    if (!state.maxTime || state.maxTime > now + 366 * 864e5) state.maxTime = Math.max(now, state.lastTick || 0);
+    if (now < state.lastTick - 5000) { state.stats.clockBack = (state.stats.clockBack || 0) + 1; state.lastTick = now; }
+    if (now > state.maxTime) state.maxTime = now;
   }
 
   /* ---------- Simulation ---------- */
   let bulk = false;
   function stepSim(now) {
+    const ref = Math.max(state.lastTick, Math.min(state.maxTime || 0, now));
     let gap = (now - state.lastTick) / 1000;
+    if (gap > 60) gap = (now - ref) / 1000;
+    clockGuard(now);
     bulk = false;
     if (gap <= 0) { state.lastTick = now; return; }
     if (gap > 60) { state.lastTick = now; offline(gap); return; }
@@ -180,11 +214,21 @@
   function frame(ts) {
     root.requestAnimationFrame(frame);
     if (!state) return;
+    const cap = fpsCap();
+    if (cap && lastRender && ts - lastRender < 1000 / cap - 2) return;
+    lastRender = ts;
     const now = Date.now();
     const dt = lastFrame ? Math.min(0.1, Math.max(0, (ts - lastFrame) / 1000)) : 0.016;
     lastFrame = ts;
+    perfSample(dt);
+    pollPads();
     if (ST.open) { state.lastTick = now; return; }
     stepSim(now);
+    autoAcc += dt;
+    if (autoAcc >= 1) {
+      autoAcc = 0;
+      if (E.autoBuy(state) > 0) { state._ev = state._ev.filter(ev => ev.t !== 'buy' || ev.milestone); UI.update(now, true); }
+    }
     drain();
     AR.frame(dt, now);
     FX.frame(dt);
@@ -205,6 +249,13 @@
     buyHero() { if (E.buyHero(state, state.settings.buy)) { drain(); UI.update(Date.now(), true); } },
     buyFighter(id) { if (E.buyFighter(state, id, state.settings.buy)) { drain(); UI.update(Date.now(), true); } },
     buyWorker(id) { if (E.buyWorker(state, id, state.settings.buy)) { drain(); UI.update(Date.now(), true); } },
+    buyTrain(k) { if (E.buyTrain(state, k, state.settings.buy)) { drain(); UI.update(Date.now(), true); } },
+    buyNode(id) {
+      if (E.buyNode(state, id)) {
+        AU.play('milestone'); haptic(20); drain(); UI.update(Date.now(), true); UI.renderSettings(); saveLocal();
+        const n = E.C.tree.find(x => x.id === id); UI.toast(`Seelenbaum: ${n.name} Stufe ${E.tr(state, id)}`, 'gold');
+      }
+    },
     buyTalent(id) { if (E.buyTalent(state, id)) { AU.play('buy'); UI.update(Date.now(), true); } },
     useSkill(id) { if (E.useSkill(state, id, Date.now())) drain(); },
     setStage(n) { E.setStage(state, n); drain(); UI.hud(Date.now()); },
@@ -215,14 +266,18 @@
       if (k === 'sci') FMT.setSci(v);
       if (k === 'sound' || k === 'music') { applyAudio(); if (v) AU.unlock(); }
       if (k === 'theme') applyTheme();
+      if (k === 'musicVol' || k === 'sfxVol') applyAudio();
+      if (k === 'gfx' || k === 'fx' || k === 'shake' || k === 'numbers' || k === 'eco') { perfSlow = 0; autoLow = false; applyGfx(); }
+      if (k === 'haptics' && v) haptic(25);
       UI.update(Date.now(), true); UI.hud(Date.now());
       saveLocal();
     },
     ascend() {
       const gain = E.ascend(state, Date.now());
       if (gain > 0) {
+        const evs = state._ev, a = evs.find(ev => ev.t === 'ascend');
         drain(); AR.reset(); UI.rebuild(); UI.showTab('fighters');
-        UI.toast(`+${FMT.fmt(gain)} Seelen! Neuer Lauf, stärker als zuvor.`, 'gold');
+        rebirth(gain, a ? a.crystals : E.crystalsFor(gain));
         saveLocal(); saveCloud();
       }
     },
@@ -244,6 +299,78 @@
     }
   };
 
+  /* ---------- Aufstiegs-Animation ---------- */
+  function rebirth(gain, crystals) {
+    const o = document.createElement('div');
+    o.className = 'rebirth';
+    o.innerHTML = `<div class="rb-page"></div><div class="rb-text"><b>Neues Heft!</b><span>+${FMT.fmt(gain)} Seelen · +${crystals} Tintenkristalle</span><small>Lauf ${state.ascensions + 1} beginnt – stärker als zuvor.</small></div>`;
+    document.body.appendChild(o);
+    haptic([40, 60, 120]);
+    const w = root.innerWidth, h = root.innerHeight;
+    for (let i = 0; i < 4; i++) setTimeout(() => FX.sparkles(w * (0.2 + Math.random() * 0.6), h * (0.3 + Math.random() * 0.3), 14), 300 + i * 220);
+    setTimeout(() => o.classList.add('out'), 2600);
+    setTimeout(() => o.remove(), 3300);
+    o.addEventListener('click', () => { o.classList.add('out'); setTimeout(() => o.remove(), 500); });
+  }
+
+  /* ---------- Hauptmenü ---------- */
+  function showMenu(then) {
+    const m = document.getElementById('menu');
+    menuOpen = true; m.hidden = false;
+    const s = state;
+    document.getElementById('menuPlay').textContent = s.stats.kills > 0 ? 'Weiterspielen' : 'Spiel starten';
+    document.getElementById('menuFoot').textContent = s.stats.kills > 0
+      ? `Stufe ${s.stage} · Level ${s.level} · ${s.ascensions}× aufgestiegen · Spielzeit ${FMT.dur(s.stats.playTime)}`
+      : 'Tippe, klicke oder drücke die Leertaste zum Angreifen. Dein Held kämpft auch allein.';
+    const c = document.getElementById('menuArt');
+    try { root.KK_ART.portrait(c, 'hero', pal, { ink: true }); } catch (e) { /* nur Deko */ }
+    const close = after => {
+      if (!menuOpen) return;
+      menuOpen = false; m.classList.add('out');
+      AU.unlock();
+      setTimeout(() => { m.hidden = true; m.classList.remove('out'); }, 260);
+      state.lastTick = Date.now();
+      if (after) after();
+    };
+    document.getElementById('menuPlay').onclick = () => close(then);
+    document.getElementById('menuSettings').onclick = () => close(() => { then(); UI.showTab('more'); });
+    document.getElementById('menuStory').onclick = () => close(() => { if (state.story.seen.intro) ST.play('intro', then); else then(); });
+    showMenu.close = close;
+  }
+  function afterMenu() {
+    if (!state.story.seen.intro) story('intro', () => { showOffline(); setTimeout(daily, 300); });
+    else { showOffline(); setTimeout(daily, 700); }
+  }
+
+  /* ---------- Controller (Gamepad) ---------- */
+  const TAB_ORDER = ['fighters', 'workers', 'talents', 'loot', 'ascend', 'more'];
+  function pollPads() {
+    if (!navigator.getGamepads) return;
+    let pads0;
+    try { pads0 = navigator.getGamepads(); } catch (e) { return; }
+    const gp = pads0 && Array.from(pads0).find(p => p && p.connected);
+    if (!gp) return;
+    const prev = pads.prev, cur = gp.buttons.map(b => b.pressed || b.value > 0.5);
+    const hit = i => cur[i] && !prev[i];
+    pads.prev = cur;
+    if (!pads.seen) { pads.seen = true; UI.toast('Controller verbunden: A angreifen · X/Y Fähigkeiten · LB/RB Tabs · Steuerkreuz Stufe'); }
+    if (menuOpen) { if (hit(0) || hit(9)) showMenu.close(afterMenu); return; }
+    if (UI.modalOpen()) { if (hit(0)) { const b = document.querySelector('#modal .actions button:last-child'); if (b) b.click(); } else if (hit(1)) { const b = document.querySelector('#modal .actions button'); if (b) b.click(); } return; }
+    if (ST.open || LOOT.open) { if (hit(0) || hit(1)) document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter' })); return; }
+    if (hit(0) || (cur[7] && Math.random() < 0.25)) { const p = AR.enemyPos(); attack(p.x, p.y); }
+    if (hit(2)) actions.useSkill(E.D.skills[0].id);
+    if (hit(3)) actions.useSkill(E.D.skills[1].id);
+    if (hit(6)) actions.useSkill(E.D.skills[2].id);
+    if (hit(8)) actions.challengeBoss();
+    if (hit(14)) actions.setStage(state.stage - 1);
+    if (hit(15)) actions.setStage(state.stage + 1);
+    if (hit(4) || hit(5)) {
+      const i = Math.max(0, TAB_ORDER.indexOf(UI.tab)), n = (i + (hit(5) ? 1 : TAB_ORDER.length - 1)) % TAB_ORDER.length;
+      UI.showTab(TAB_ORDER[n]);
+      if (TAB_ORDER[n] === 'loot') LOOT.render(true);
+    }
+  }
+
   /* ---------- Eingabe ---------- */
   function attack(x, y) {
     AU.unlock();
@@ -262,7 +389,7 @@
     canvas.addEventListener('contextmenu', e => e.preventDefault());
     document.addEventListener('pointerdown', () => AU.unlock(), { once: true, capture: true });
     document.addEventListener('keydown', e => {
-      if (e.repeat || UI.modalOpen() || ST.open || LOOT.open) return;
+      if (e.repeat || menuOpen || UI.modalOpen() || ST.open || LOOT.open) return;
       const tag = (e.target && e.target.tagName) || '';
       if (tag === 'TEXTAREA' || tag === 'INPUT') return;
       if ((e.code === 'Space' || e.key === 'Enter') && tag !== 'BUTTON') {
@@ -272,7 +399,14 @@
         const k = E.D.skills[+e.key - 1]; if (k) actions.useSkill(k.id);
       } else if (e.key === 'ArrowLeft') actions.setStage(state.stage - 1);
       else if (e.key === 'ArrowRight') actions.setStage(state.stage + 1);
+      else if (e.key === 'b' || e.key === 'B') actions.challengeBoss();
+      else if (e.key === 'Tab') {
+        e.preventDefault();
+        const i = Math.max(0, TAB_ORDER.indexOf(UI.tab)), n = (i + (e.shiftKey ? TAB_ORDER.length - 1 : 1)) % TAB_ORDER.length;
+        UI.showTab(TAB_ORDER[n]); if (TAB_ORDER[n] === 'loot') LOOT.render(true);
+      } else if (e.key === 'f' || e.key === 'F') document.getElementById('btnFullscreen').click();
     });
+    document.addEventListener('keydown', e => { if (menuOpen && (e.key === 'Enter' || e.code === 'Space')) { e.preventDefault(); showMenu.close(afterMenu); } }, true);
     // iOS: Pinch-Zoom und Doppeltipp-Zoom im Spiel verhindern
     document.addEventListener('gesturestart', e => e.preventDefault());
     document.addEventListener('dblclick', e => { if (e.target.tagName !== 'TEXTAREA') e.preventDefault(); }, { passive: false });
@@ -333,6 +467,7 @@
     bootSavedAt = state.savedAt || 0;
     FMT.setSci(state.settings.sci);
     applyAudio();
+    applyGfx();
     AR.init(canvas, () => state);
     pal = AR.readPalette();
     FX.init(document.getElementById('fx'), document.querySelector('#hudGoldBox .coin'), () => {
@@ -354,8 +489,8 @@
     UI.hud(Date.now());
     root.requestAnimationFrame(frame);
     cloudBoot();
-    if (!state.story.seen.intro) setTimeout(() => story('intro', () => setTimeout(daily, 300)), 300);
-    else setTimeout(daily, 900);
+    // Hauptmenü beim Start (im eingebetteten Vorschaumodus ohne Ton-Freigabe genauso)
+    if (root.KK_SKIP_MENU) afterMenu(); else showMenu(afterMenu);
 
     try {
       const h = root.claude && root.claude.hot;

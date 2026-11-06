@@ -14,12 +14,18 @@
   };
 
   let S = null, A = null, pal = null;
+  const TRAIN = [
+    { id: 'vit', name: 'Vitalität', look: 'hero', color: 'green', desc: 'Mehr Lebenspunkte. Alle 25 Stufen ×2.' },
+    { id: 'armor', name: 'Rüstung', look: 'knight', color: 'teal', desc: 'Weniger Schaden durch Gegner (bis 75 %).' },
+    { id: 'tempo', name: 'Tempo', look: 'ninja', color: 'yellow', desc: 'Schnellere automatische Angriffe.' }
+  ];
+  const pctS = x => (Math.round(x * 1000) / 10).toString().replace('.', ',') + ' %';
   const rows = { fighters: {}, workers: {}, hero: null };
   let curTab = 'fighters';
   let lastStageKey = '';
   let campT = 0;
   const campParts = [];
-  let shownGold = 0, lastHud = 0, lastCombo = 0;
+  let shownGold = 0, lastHud = 0, lastCombo = 0, koHint = false;
   const modalQueue = [];
   const mcol = name => `var(--m-${name})`;
 
@@ -90,7 +96,7 @@
     const o = { r, c, nm, lv, stat, desc, msi, btn, bq, bc, kind, item, look: item ? item.look : 'hero', drawn: '', color: item ? item.color : 'blue', could: false };
     r.style.setProperty('--c', mcol(o.color));
     holdButton(btn, () => {
-      if (kind === 'hero') A.buyHero(); else if (kind === 'fighter') A.buyFighter(item.id); else A.buyWorker(item.id);
+      if (kind === 'hero') A.buyHero(); else if (kind === 'fighter') A.buyFighter(item.id); else if (kind === 'train') A.buyTrain(item.id); else A.buyWorker(item.id);
     });
     return o;
   }
@@ -99,6 +105,8 @@
     const lf = $('listFighters'); lf.innerHTML = '';
     rows.hero = makeRow('hero', null);
     lf.appendChild(rows.hero.r);
+    rows.train = {};
+    for (const t of TRAIN) { const o = makeRow('train', t); rows.train[t.id] = o; lf.appendChild(o.r); }
     for (const f of D.fighters) { rows.fighters[f.id] = makeRow('fighter', f); lf.appendChild(rows.fighters[f.id].r); }
     const lw = $('listWorkers'); lw.innerHTML = '';
     for (const w of D.workers) { rows.workers[w.id] = makeRow('worker', w); lw.appendChild(rows.workers[w.id].r); }
@@ -186,6 +194,19 @@
     seg('setMusic', 'music', v => v === '1');
     seg('setSci', 'sci', v => v === '1');
     seg('setTheme', 'theme', v => v);
+    seg('setGfx', 'gfx', v => v);
+    seg('setFps', 'fps', v => +v);
+    const bool = v => v === '1';
+    seg('setEco', 'eco', bool); seg('setShake', 'shake', bool); seg('setNumbers', 'numbers', bool);
+    seg('setAutoEquip', 'autoEquip', bool); seg('setAutoSkills', 'autoSkills', bool); seg('setHaptics', 'haptics', bool);
+    const range = (id, key) => $(id).addEventListener('input', e => A.setSetting(key, +e.target.value / 100));
+    range('setFx', 'fx'); range('setMusicVol', 'musicVol'); range('setSfxVol', 'sfxVol');
+    $('btnFullscreen').addEventListener('click', () => {
+      try {
+        if (document.fullscreenElement) document.exitFullscreen();
+        else (document.documentElement.requestFullscreen || document.documentElement.webkitRequestFullscreen).call(document.documentElement);
+      } catch (e) { toast('Vollbild wird hier nicht unterstützt.'); }
+    });
     $('btnExport').addEventListener('click', () => {
       const code = A.exportSave();
       const ta = $('saveText'); ta.value = code;
@@ -221,6 +242,14 @@
     mark('setMusic', S().settings.music ? '1' : '0');
     mark('setSci', S().settings.sci ? '1' : '0');
     mark('setTheme', S().settings.theme || 'auto');
+    const st = S().settings, b01 = v => (v === false ? '0' : '1');
+    mark('setGfx', st.gfx || 'auto'); mark('setFps', String(st.fps == null ? 60 : st.fps));
+    mark('setEco', st.eco ? '1' : '0'); mark('setShake', b01(st.shake)); mark('setNumbers', b01(st.numbers));
+    mark('setAutoEquip', b01(st.autoEquip)); mark('setAutoSkills', b01(st.autoSkills)); mark('setHaptics', b01(st.haptics));
+    $('setFx').value = Math.round((st.fx == null ? 1 : st.fx) * 100);
+    $('setMusicVol').value = Math.round((st.musicVol == null ? 0.8 : st.musicVol) * 100);
+    $('setSfxVol').value = Math.round((st.sfxVol == null ? 0.9 : st.sfxVol) * 100);
+    $('setAutoSkills').closest('.set-row').hidden = !E.tr(S(), 'p_autoskill');
     const any = !!(S().settings.sound || S().settings.music);
     $('btnSound').setAttribute('aria-pressed', String(any));
     $('btnSound').setAttribute('aria-label', any ? 'Ton und Musik aus' : 'Ton und Musik an');
@@ -236,6 +265,7 @@
     const passive = E.workerIncome(s, now) + E.idleCombat(s).gold;
     setText($('hudGps'), '+' + fmt(passive, { decimals: true }) + ' /s');
     setText($('hudLv'), String(s.level));
+    if (!lastHud || s._titleDirty) { hudTitle(); s._titleDirty = false; }
     $('hudXp').style.width = Math.min(100, s.xp / E.xpNeed(s.level) * 100).toFixed(1) + '%';
     $('hudSouls').hidden = s.souls <= 0 && s.ascensions <= 0;
     setText($('hudStarsN'), fmt(s.stars));
@@ -321,12 +351,32 @@
     let lvl, price, can, show = true, locked = false;
     if (o.kind === 'hero') {
       lvl = s.hero; price = E.heroPrice(s, mode);
-      setText(o.nm, 'Held');
+      setText(o.nm, 'Held · Angriff');
       setText(o.lv, 'Lv ' + lvl);
-      setText(o.stat, `Klick ${fmt(E.clickDamage(s, now))}`);
+      setText(o.stat, `Treffer ${fmt(E.heroDmgBase(s, now))} · ${E.atkSpeed(s, now).toFixed(2).replace('.', ',')}/s · Klick ${fmt(E.clickDamage(s, now))}`);
       const next = (Math.floor(lvl / 25) + 1) * 25;
-      setText(o.desc, `Lv ${next}: Klick ×2, +1 % DPS pro Klick`);
+      setText(o.desc, `Lv ${next}: Schaden ×2, +1 % DPS pro Treffer`);
       o.msi.style.width = (lvl % 25) / 25 * 100 + '%';
+    } else if (o.kind === 'train') {
+      const k = o.item.id; lvl = s[k]; price = E.trainPrice(s, k, mode);
+      setText(o.nm, o.item.name);
+      setText(o.lv, 'Lv ' + lvl);
+      if (k === 'vit') {
+        const save = s.vit; s.vit += price.n; const after = E.heroMaxHp(s); s.vit = save;
+        setText(o.stat, `${fmt(E.heroMaxHp(s))} LP (+${fmt(after - E.heroMaxHp(s))})`);
+        o.msi.style.width = (lvl % 25) / 25 * 100 + '%';
+      } else if (k === 'armor') {
+        const save = s.armor; s.armor += price.n; const after = E.armorPct(s); s.armor = save;
+        setText(o.stat, `${pctS(E.armorPct(s))} weniger Schaden (→ ${pctS(after)})`);
+        o.msi.style.width = (E.armorPct(s) / B.armorMax * 100) + '%';
+      } else {
+        const save = s.tempo; s.tempo += price.n; const after = E.atkSpeed(s, now); s.tempo = save;
+        const cur = E.atkSpeed(s, now);
+        setText(o.stat, `${cur.toFixed(2).replace('.', ',')} Angriffe/s (→ ${after.toFixed(2).replace('.', ',')})`);
+        o.msi.style.width = (cur / B.heroAtkSpeedMax * 100) + '%';
+      }
+      setText(o.desc, o.item.desc);
+      show = lvl > 0 || s.maxStage >= 3 || s.ascensions > 0;
     } else if (o.kind === 'fighter') {
       const f = o.item; lvl = s.fighters[f.id]; price = E.fighterPrice(s, f.id, mode);
       const idx = D.fighters.indexOf(f);
@@ -387,7 +437,9 @@
     if (curTab === 'fighters' || force) {
       setText($('fightSum'), `DPS ${fmt(E.totalDps(s, now))} · Klick ${fmt(E.clickDamage(s, now))} · Krit ${Math.round(E.critChance(s) * 100)} % ×${E.critMult(s)}`);
       rowUpdate(rows.hero, s, now, mode);
+      for (const t of TRAIN) rowUpdate(rows.train[t.id], s, now, mode);
       for (const f of D.fighters) rowUpdate(rows.fighters[f.id], s, now, mode);
+      renderAuto(s);
     }
     if (curTab === 'workers' || force) {
       setText($('workSum'), `Passiv ${fmt(E.workerIncome(s, now), { decimals: true })} Gold /s`);
@@ -395,6 +447,7 @@
       for (const w of D.workers) rowUpdate(rows.workers[w.id], s, now, mode);
     }
     if (curTab === 'talents' || force) renderTalents(s, now);
+    renderSheet(s, now);
     if (curTab === 'ascend' || force) renderAscend(s);
     if (curTab === 'more' && !force) renderStats(s);
   }
@@ -441,7 +494,92 @@
     });
   }
 
+  function sheetRows(s, now) {
+    const w = E.weapon(s);
+    return [
+      ['Lebenspunkte', `${fmt(Math.max(0, s.cb.hp))} / ${fmt(E.heroMaxHp(s))}`],
+      ['Treffer', fmt(E.heroDmgBase(s, now))],
+      ['Angriffe pro Sekunde', E.atkSpeed(s, now).toFixed(2).replace('.', ',')],
+      ['Waffe', w.name],
+      ['Krit-Chance', pctS(E.critChance(s))],
+      ['Krit-Schaden', '×' + E.critMult(s).toString().replace('.', ',')],
+      ['Ausweichen', pctS(E.dodgeChance(s))],
+      ['Blocken', pctS(E.blockChance(s))],
+      ['Konter', pctS(E.counterChance(s))],
+      ['Lebensraub', pctS(E.lifesteal(s) * 0.4) + ' LP/Treffer'],
+      ['Rüstung', pctS(E.armorPct(s))],
+      ['Truppen-DPS', fmt(E.totalDps(s, now))],
+      ['Gold pro Sekunde', fmt(E.incomePerSec(s, now), { decimals: true })],
+      ['Level-Bonus', '×' + fmt(Math.pow(B.levelBonus, s.level - 1), { decimals: true })],
+      ['Seelen-Bonus', '×' + fmt(1 + s.souls * B.soulBonus, { decimals: true })]
+    ];
+  }
+  function renderSheet(s, now) {
+    const html = sheetRows(s, now).map(([a, b]) => `<dt>${a}</dt><dd>${b}</dd>`).join('');
+    setHTML($('statsSide'), html);
+    if (curTab === 'talents') setHTML($('statsTab'), html);
+    const C = root.KK_CONTENT;
+    setHTML($('sideGear'), C.slots.map(sl => { const it = E.IT[s.equip[sl.id]]; return `<div><span>${sl.name}</span><b style="color:${it ? rcol(it.rarity) : 'var(--ink-soft)'}">${it ? it.name + ' · Lv ' + s.inv.items[it.id] : '–'}</b></div>`; }).join(''));
+  }
+  function rcol(rid) { const r = E.RAR[E.RI[rid]]; return r.color === 'pencil' ? 'var(--pencil)' : `var(--m-${r.color})`; }
+  function renderAuto(s) {
+    const box = $('autoBuy');
+    if (!E.tr(s, 'p_auto')) { setHTML(box, s.ascensions > 0 || s.maxStage >= B.ascendMinStage - 10 ? '<span class="sub">Auto-Kauf: im Seelenbaum freischalten („Fleißige Hände“, nach dem ersten Aufstieg).</span>' : ''); box._built = false; return; }
+    if (!box._built) {
+      box._built = true; box._h = null;
+      box.innerHTML = '<span class="sub">Auto-Kauf:</span>' + [['fighters', 'Kämpfer'], ['hero', 'Held'], ['train', 'Training'], ['workers', 'Arbeiter']].map(([k, l]) => `<button type="button" class="chip-btn" data-k="${k}">${l}</button>`).join('');
+      box.querySelectorAll('button').forEach(b => b.addEventListener('click', () => { const st = S(); st.auto[b.dataset.k] = !st.auto[b.dataset.k]; renderAuto(st); }));
+    }
+    box.querySelectorAll('button').forEach(b => { b.setAttribute('aria-pressed', String(!!s.auto[b.dataset.k])); toggle(b, 'on', !!s.auto[b.dataset.k]); });
+  }
+  function renderTree(s) {
+    const C = root.KK_CONTENT;
+    setText($('aCrystals'), `${fmt(s.crystals)} Tintenkristalle`);
+    const box = $('tree');
+    const key = JSON.stringify(s.tree) + s.crystals;
+    if (box._k === key) return;
+    box._k = key;
+    const branches = [...new Set(C.tree.map(n => n.branch))];
+    box.innerHTML = '';
+    for (const br of branches) {
+      const col = el('div', 'branch');
+      col.appendChild(el('h4', null, br));
+      for (const n of C.tree.filter(x => x.branch === br)) {
+        const st = E.nodeState(s, n.id);
+        const b = el('button', 'node' + (st.maxed ? ' maxed' : '') + (!st.reqOk ? ' locked' : '') + (st.can ? ' can' : ''));
+        b.type = 'button';
+        b.innerHTML = `<b>${n.name}</b><span>${n.desc}</span><span class="nr">${st.rank}/${n.max}${st.maxed ? '' : ' · ' + st.cost + ' ✦'}</span>`;
+        b.disabled = !st.can;
+        if (!st.reqOk) b.title = 'Benötigt: ' + C.tree.find(x => x.id === n.req).name;
+        b.addEventListener('click', () => A.buyNode(n.id));
+        col.appendChild(b);
+      }
+      box.appendChild(col);
+    }
+  }
+  function ascendPreview(s) {
+    const gain = E.soulsForAscend(s);
+    if (gain <= 0) return '';
+    const now = 1 + s.souls * B.soulBonus, after = 1 + (s.souls + gain) * B.soulBonus;
+    return `<div><span>Seelen</span><b>+${fmt(gain)}</b></div><div><span>Tintenkristalle</span><b>+${E.crystalsFor(gain)} ✦</b></div>` +
+      `<div><span>Bonus auf alles</span><b>×${fmt(now, { decimals: true })} → ×${fmt(after, { decimals: true })}</b></div><div><span>Start bei Stufe</span><b>${1 + 5 * E.tr(s, 'p_start')}</b></div>`;
+  }
+  function renderTitles(s) {
+    const C = root.KK_CONTENT, box = $('titles');
+    box.innerHTML = '';
+    for (const t of C.titles) {
+      const ok = !t.ach || s.ach[t.ach];
+      const b = el('button', 'btn' + (ok ? '' : ' locked') + (s.title === t.id ? ' on' : ''));
+      b.type = 'button'; b.textContent = ok ? t.name : '???';
+      if (ok) b.addEventListener('click', () => { S().title = t.id; renderTitles(S()); hudTitle(); }); else { b.disabled = true; b.title = 'Erfolg nötig: ' + (D.achievements.find(a => a.id === t.ach) || {}).name; }
+      box.appendChild(b);
+    }
+  }
+  function hudTitle() { const C = root.KK_CONTENT, t = C.titles.find(x => x.id === S().title); setText($('hudTitle'), t && t.id !== 'none' ? t.name : ''); }
+
   function renderAscend(s) {
+    setHTML($('aPreview'), ascendPreview(s));
+    renderTree(s);
     setText($('aSouls'), fmt(s.souls));
     setText($('aBonus'), s.souls > 0 ? `+${fmt(s.souls * B.soulBonus * 100)} % auf Gold und Schaden · ${s.ascensions}× aufgestiegen` : 'Noch keine Seelen.');
     const gain = E.soulsForAscend(s);
@@ -468,7 +606,15 @@
       ['Gold in diesem Lauf', fmt(s.runGold)],
       ['Offline verdient', fmt(s.stats.offlineGold)],
       ['Aufstiege', String(s.ascensions)],
-      ['Seelen insgesamt', fmt(s.stats.soulsEarned)]
+      ['Seelen insgesamt', fmt(s.stats.soulsEarned)],
+      ['Ausgewichen', fmt(s.stats.dodges || 0)],
+      ['Geblockt', fmt(s.stats.blocks || 0)],
+      ['Pariert', fmt(s.stats.parries || 0)],
+      ['Konter', fmt(s.stats.counters || 0)],
+      ['K.O.', fmt(s.stats.kos || 0)],
+      ['Elite-Gegner besiegt', fmt(s.stats.elites || 0)],
+      ['Beute gefunden', fmt(s.stats.drops || 0)],
+      ['Tintenkristalle insgesamt', fmt(s.stats.crystalsEarned || 0)]
     ];
     setHTML($('stats'), rowsH.map(([a, b]) => `<dt>${a}</dt><dd>${b}</dd>`).join(''));
     const done = E.achCount(s);
@@ -489,6 +635,7 @@
     const s = S();
     renderStats(s);
     renderCodex(s);
+    renderTitles(s);
     renderSettings();
     const C = root.KK_CLOUD;
     const st = C ? C.status : 'off';
@@ -570,7 +717,17 @@
         if (ev.stage + 1 === B.ascendMinStage) toast('Aufstieg freigeschaltet!', 'gold');
         break;
       case 'bossFail':
-        toast('Boss zu stark – erst aufrüsten!');
+        toast(S().cb.down > 0 ? 'Rückzug! Mehr Vitalität oder Rüstung kaufen.' : 'Zeit abgelaufen – erst aufrüsten!');
+        break;
+      case 'ko':
+        if (!koHint) { koHint = true; setTimeout(() => toast('K.O.! Tipp: Vitalität und Rüstung im Kämpfer-Tab stärken den Helden.'), 400); }
+        break;
+      case 'drop': {
+        const r = ev.res;
+        if (r.kind === 'item') toast(`Fund: ${E.IT[r.id].name} (${E.RAR[r.rank].name})${r.equipped ? ' – angelegt!' : r.up ? ' – Stufe ' + r.lvl : ''}`, r.rank >= 3 ? 'gold' : 'green');
+        break;
+      }
+      case 'phase':
         break;
       case 'buy': {
         const o = ev.kind === 'fighter' ? rows.fighters[ev.id] : ev.kind === 'worker' ? rows.workers[ev.id] : rows.hero;
@@ -612,6 +769,25 @@
     });
   }
 
+  function countUp(node, to, ms) {
+    const t0 = performance.now();
+    const step = () => { const k = Math.min(1, (performance.now() - t0) / ms), e = 1 - Math.pow(1 - k, 3); node.textContent = fmt(to * e); if (k < 1) requestAnimationFrame(step); };
+    step();
+  }
+  function showOffline(off, levels, onClose) {
+    const items = (off.items || []).map(r => `<li style="color:${rcol(E.RAR[r.rank].id)}">${E.IT[r.id].name} · ${E.RAR[r.rank].name}${r.isNew ? ' · NEU' : r.up ? ' · Stufe ' + r.lvl : ''}</li>`).join('');
+    const capped = off.seconds > off.used;
+    modal({
+      title: 'Willkommen zurück!',
+      body: `<p>Du warst ${dur(off.seconds)} weg. Deine Strichmännchen haben weitergekämpft:</p>
+        <div class="off-grid"><div><span>Gold</span><b id="offGold">0</b></div><div><span>Erfahrung</span><b id="offXp">0</b></div><div><span>Gegner</span><b id="offKills">0</b></div><div><span>Level</span><b>${levels > 0 ? '+' + levels : '–'}</b></div></div>
+        ${items ? `<p>Gefundene Beute:</p><ul class="off-loot">${items}</ul>` : ''}
+        <p class="sub">Offline-Effizienz ${Math.round(off.eff * 100)} %, gezählt werden höchstens ${dur(E.offlineCap(S()))}${capped ? ' (Grenze erreicht)' : ''}. Pro 30 Minuten gibt es einen Beutewurf, höchstens 8.</p>`,
+      actions: [{ label: 'Einsammeln', onClick: onClose }]
+    });
+    requestAnimationFrame(() => { const g = $('offGold'); if (g) { countUp(g, off.gold, 1400); countUp($('offXp'), off.xp, 1200); countUp($('offKills'), off.kills, 1000); } });
+  }
+
   function setPalette(p) { pal = p; for (const k in rows.fighters) rows.fighters[k].drawn = ''; for (const k in rows.workers) rows.workers[k].drawn = ''; if (rows.hero) rows.hero.drawn = ''; }
 
   function init(getState, actions, palette) {
@@ -625,7 +801,7 @@
       if (gain <= 0) return;
       modal({
         title: 'Aufsteigen?',
-        body: `<p class="bigline">+${fmt(gain)} Seelen</p><p>Du startest wieder bei Stufe 1, mit dauerhaft +${fmt(gain * B.soulBonus * 100)} % mehr Gold und Schaden. Level, Talente und Erfolge bleiben.</p>`,
+        body: `<div class="asc-preview">${ascendPreview(S())}</div><p>Gold, Kämpfer, Held, Training und Arbeiter werden zurückgesetzt. Seelen, Kristalle, Seelenbaum, Level, Talente, Items, Skins und Erfolge bleiben.</p>`,
         actions: [{ label: 'Noch nicht', kind: 'ghost' }, { label: 'Aufsteigen', onClick: () => A.ascend() }]
       });
     });
@@ -638,5 +814,5 @@
 
   function rebuild() { lastStageKey = ''; update(Date.now(), true); renderSettings(); }
 
-  root.KK_UI = { init, update, hud, toast, modal, modalOpen, onEvent, showDaily, showTab, setPalette, campFrame, rebuild, renderMore, get tab() { return curTab; } };
+  root.KK_UI = { init, update, hud, toast, modal, modalOpen, onEvent, showDaily, showOffline, renderSettings, showTab, setPalette, campFrame, rebuild, renderMore, get tab() { return curTab; } };
 })(window);
