@@ -1,0 +1,189 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<title>Kritzelkrieg</title>
+<meta name="description" content="Stickman-Idle-Clicker: Tippe, stelle eine Strichmännchen-Armee auf, verdiene passiv Gold und steig auf.">
+<meta name="theme-color" content="#f7f5ec" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#1e2925" media="(prefers-color-scheme: dark)">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="Kritzelkrieg">
+<meta name="format-detection" content="telephone=no">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<link rel="icon" type="image/png" href="icons/icon-192.png">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Patrick+Hand&family=Permanent+Marker&display=swap">
+<style>
+  :root { padding-top: env(safe-area-inset-top, 0px); padding-bottom: env(safe-area-inset-bottom, 0px); }
+  body { margin: 0; }
+  [hidden] { display: none !important; }
+</style>
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<!-- APP:START -->
+<div class="app" id="app">
+  <header class="hud">
+    <div class="hud-gold" id="hudGoldBox">
+      <span class="coin" aria-hidden="true"></span>
+      <div class="hud-gold-text">
+        <b id="hudGold">0</b>
+        <small id="hudGps">+0 /s</small>
+      </div>
+    </div>
+    <button class="hud-level" id="hudLevel" type="button" aria-label="Level und Talente">
+      <span class="hud-lv">Lv <b id="hudLv">1</b></span>
+      <span class="xpbar" aria-hidden="true"><i id="hudXp"></i></span>
+    </button>
+    <div class="hud-souls" id="hudSouls" hidden title="Seelen">
+      <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M10 2c3 4 6 6 6 10a6 6 0 0 1-12 0c0-2 1-3.5 2.5-5 .3 2 1.3 3 2.3 3C8 7 8.5 4.5 10 2z"/></svg>
+      <b id="hudSoulsN">0</b>
+    </div>
+    <button class="icon-btn" id="btnSound" type="button" aria-label="Ton aus" aria-pressed="true">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path class="spk" d="M4 9h4l5-4v14l-5-4H4z"/><path class="wave" d="M16 8.5c1.2 1 1.8 2.2 1.8 3.5s-.6 2.5-1.8 3.5M18.5 6c2 1.6 3 3.6 3 6s-1 4.4-3 6"/><path class="mute" d="M16 9l5 6M21 9l-5 6"/></svg>
+    </button>
+  </header>
+
+  <section class="arena" id="arenaWrap">
+    <canvas id="arena" aria-label="Kampfarena. Tippe, um anzugreifen."></canvas>
+    <div class="stagebar">
+      <button class="st-btn" id="stPrev" type="button" aria-label="Vorherige Stufe">‹</button>
+      <div class="stageinfo">
+        <div class="stagetitle">Stufe <b id="stNum">1</b></div>
+        <div class="pips" id="stPips" aria-hidden="true"></div>
+        <div class="zone" id="stZone"></div>
+      </div>
+      <button class="st-btn" id="stNext" type="button" aria-label="Nächste Stufe">›</button>
+    </div>
+    <div class="bossbar" id="bossBar" hidden><i id="bossFill"></i><span id="bossTime"></span></div>
+    <button class="boss-btn" id="btnBoss" type="button" hidden>Boss herausfordern</button>
+    <div class="dps-tag" id="dpsTag"></div>
+    <div class="skills" id="skills"></div>
+    <div class="tap-hint" id="tapHint" hidden>Tippe auf die Arena!</div>
+    <div class="toasts" id="toasts" aria-live="polite"></div>
+  </section>
+
+  <nav class="tabs" id="tabs" role="tablist" aria-label="Bereiche">
+    <button type="button" role="tab" data-tab="fighters" aria-selected="true">Kämpfer</button>
+    <button type="button" role="tab" data-tab="workers" aria-selected="false">Lager</button>
+    <button type="button" role="tab" data-tab="talents" aria-selected="false">Talente<span class="badge dot" id="badgeTal" hidden></span></button>
+    <button type="button" role="tab" data-tab="ascend" aria-selected="false">Aufstieg<span class="badge dot" id="badgeAsc" hidden></span></button>
+    <button type="button" role="tab" data-tab="more" aria-selected="false">Mehr</button>
+  </nav>
+
+  <main class="panel" id="panel">
+    <section class="pane" data-pane="fighters">
+      <div class="pane-head">
+        <div>
+          <h2>Deine Truppe</h2>
+          <p class="sub" id="fightSum">DPS 0 · Klick 1</p>
+        </div>
+        <div class="buybar" data-buybar></div>
+      </div>
+      <div class="list" id="listFighters"></div>
+    </section>
+
+    <section class="pane" data-pane="workers" hidden>
+      <div class="camp"><canvas id="camp" aria-hidden="true"></canvas></div>
+      <div class="pane-head">
+        <div>
+          <h2>Lager</h2>
+          <p class="sub" id="workSum">Passiv 0 /s</p>
+        </div>
+        <div class="buybar" data-buybar></div>
+      </div>
+      <p class="note" id="fameNote"></p>
+      <div class="list" id="listWorkers"></div>
+    </section>
+
+    <section class="pane" data-pane="talents" hidden>
+      <div class="lvcard">
+        <div class="lvbig">Level <b id="tLv">1</b></div>
+        <div class="xpbar big" aria-hidden="true"><i id="tXp"></i></div>
+        <p class="sub" id="tXpText"></p>
+        <p class="sub" id="tLvBonus"></p>
+      </div>
+      <h3>Talente <span class="pts" id="tPts"></span></h3>
+      <div class="talents" id="talents"></div>
+      <h3>Fähigkeiten</h3>
+      <div class="skilllist" id="skillList"></div>
+    </section>
+
+    <section class="pane" data-pane="ascend" hidden>
+      <div class="asc-card">
+        <div class="asc-souls"><b id="aSouls">0</b><span>Seelen</span></div>
+        <p class="sub" id="aBonus"></p>
+      </div>
+      <div class="asc-gain">
+        <p id="aGainText"></p>
+        <button class="big-btn" id="btnAscend" type="button">Aufsteigen</button>
+      </div>
+      <h3>So funktioniert der Aufstieg</h3>
+      <ul class="rules">
+        <li>Du beginnst wieder bei Stufe 1. Gold, Kämpfer, Held und Arbeiter werden zurückgesetzt.</li>
+        <li>Du behältst Seelen, Level, Talente, Erfolge und Statistiken.</li>
+        <li>Jede Seele gibt dauerhaft <b>+10 %</b> auf Gold und Schaden.</li>
+        <li>Seelen pro Aufstieg: (höchste Stufe − 30)<sup>2,5</sup> ÷ 40. Tiefer kommen lohnt sich überproportional.</li>
+      </ul>
+    </section>
+
+    <section class="pane" data-pane="more" hidden>
+      <h3>Erfolge <span class="pts" id="achCount"></span></h3>
+      <div class="achs" id="achs"></div>
+      <h3>Statistik</h3>
+      <dl class="stats" id="stats"></dl>
+      <h3>Einstellungen</h3>
+      <div class="settings">
+        <div class="set-row"><span>Ton</span><div class="seg" id="setSound"><button type="button" data-v="1">An</button><button type="button" data-v="0">Aus</button></div></div>
+        <div class="set-row"><span>Zahlen</span><div class="seg" id="setSci"><button type="button" data-v="0">1,5M</button><button type="button" data-v="1">1,5e6</button></div></div>
+        <div class="set-row"><span>Design</span><div class="seg" id="setTheme"><button type="button" data-v="auto">Auto</button><button type="button" data-v="light">Heft</button><button type="button" data-v="dark">Tafel</button></div></div>
+      </div>
+      <h3>Spielstand</h3>
+      <p class="sub" id="saveInfo"></p>
+      <div class="savebox">
+        <label for="saveText">Export-Code (kopieren, um auf einem anderen Gerät weiterzuspielen)</label>
+        <textarea id="saveText" rows="3" spellcheck="false" autocomplete="off"></textarea>
+        <div class="btnrow">
+          <button type="button" class="btn" id="btnExport">Code erzeugen &amp; kopieren</button>
+          <button type="button" class="btn" id="btnImport">Code laden</button>
+        </div>
+        <p class="sub" id="saveMsg" aria-live="polite"></p>
+      </div>
+      <h3>Steuerung</h3>
+      <ul class="rules">
+        <li><b>Tippen/Klicken</b> auf die Arena greift an. Mehrere Finger zählen einzeln.</li>
+        <li><b>PC:</b> Leertaste greift an, Tasten 1–4 lösen Fähigkeiten aus.</li>
+        <li><b>iPhone/iPad:</b> In Safari „Teilen → Zum Home-Bildschirm“ wählen, dann läuft Kritzelkrieg wie eine App im Vollbild.</li>
+        <li>Deine Kämpfer und Arbeiter verdienen auch offline weiter (anfangs 50 %, bis zu 12 Stunden).</li>
+      </ul>
+      <div class="danger">
+        <button type="button" class="btn ghost" id="btnReset">Spielstand löschen</button>
+      </div>
+    </section>
+  </main>
+
+  <div class="modal" id="modal" hidden>
+    <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="mTitle">
+      <h2 id="mTitle"></h2>
+      <div id="mBody"></div>
+      <div class="m-actions" id="mActions"></div>
+    </div>
+  </div>
+</div>
+<!-- APP:END -->
+<script src="js/data.js"></script>
+<script src="js/engine.js"></script>
+<script src="js/format.js"></script>
+<script src="js/art.js"></script>
+<script src="js/audio.js"></script>
+<script src="js/cloud.js"></script>
+<script src="js/arena.js"></script>
+<script src="js/ui.js"></script>
+<script src="js/main.js"></script>
+</body>
+</html>

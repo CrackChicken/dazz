@@ -1,0 +1,17 @@
+{
+  "name": "Kritzelkrieg – Stickman Idle",
+  "short_name": "Kritzelkrieg",
+  "description": "Stickman-Idle-Clicker: Tippe, stelle eine Strichmännchen-Armee auf, verdiene passiv Gold und steig auf.",
+  "lang": "de",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#f7f5ec",
+  "theme_color": "#f7f5ec",
+  "icons": [
+    { "src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png" },
+    { "src": "icons/icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}
