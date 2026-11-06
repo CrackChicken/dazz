@@ -238,6 +238,7 @@
     setText($('hudLv'), String(s.level));
     $('hudXp').style.width = Math.min(100, s.xp / E.xpNeed(s.level) * 100).toFixed(1) + '%';
     $('hudSouls').hidden = s.souls <= 0 && s.ascensions <= 0;
+    setText($('hudStarsN'), fmt(s.stars));
     setText($('hudSoulsN'), fmt(s.souls));
 
     // Stufe
@@ -474,9 +475,20 @@
     setText($('achCount'), `${done}/${D.achievements.length} · +${done * B.achBonus * 100} % auf alles`);
     $('achs').querySelectorAll('.ach').forEach(n => toggle(n, 'done', !!s.ach[n.dataset.id]));
   }
+  function renderCodex(s) {
+    const box = $('codex'); box.innerHTML = '';
+    for (const st of root.KK_CONTENT.story) {
+      const seen = !!s.story.seen[st.id];
+      const b = el('button', 'btn' + (seen ? '' : ' locked')); b.type = 'button';
+      b.textContent = seen ? st.title : '???';
+      if (seen) b.addEventListener('click', () => root.KK_STORY.play(st.id)); else b.disabled = true;
+      box.appendChild(b);
+    }
+  }
   function renderMore() {
     const s = S();
     renderStats(s);
+    renderCodex(s);
     renderSettings();
     const C = root.KK_CLOUD;
     const st = C ? C.status : 'off';
@@ -571,7 +583,7 @@
         break;
       }
       case 'planeCatch':
-        toast({ gold: 'Goldflieger: Gold!', jackpot: 'Goldflieger: JACKPOT!', frenzy: 'Raserei: ×3 DPS für 30 s', clickstorm: 'Klicksturm: ×5 Klick für 20 s', cooldown: 'Alle Fähigkeiten wieder bereit!' }[ev.kind], 'gold');
+        toast({ stars: 'Goldflieger: +3 Sternchen!', gold: 'Goldflieger: Gold!', jackpot: 'Goldflieger: JACKPOT!', frenzy: 'Raserei: ×3 DPS für 30 s', clickstorm: 'Klicksturm: ×5 Klick für 20 s', cooldown: 'Alle Fähigkeiten wieder bereit!' }[ev.kind], 'gold');
         break;
       case 'chest':
         if (ev.roll >= 10) setTimeout(() => toast('JACKPOT! ×10 Boss-Beute', 'gold'), 900);
@@ -595,7 +607,7 @@
     }
     modal({
       title: res.streak > 1 ? `Tag ${res.streak} in Folge!` : 'Tagesbonus',
-      body: `<p>Schön, dass du da bist. Komm jeden Tag wieder, dann wächst der Bonus.</p><div class="days">${days}</div><p class="bigline">+${fmt(res.gold)} Gold</p>`,
+      body: `<p>Schön, dass du da bist. Komm jeden Tag wieder, dann wächst der Bonus.</p><div class="days">${days}</div><p class="bigline">+${fmt(res.gold)} Gold</p><p class="bigline">+${res.stars} ★ Sternchen</p>`,
       actions: [{ label: 'Einsammeln', onClick: onClose }]
     });
   }

@@ -2,6 +2,7 @@
 (function (root) {
   'use strict';
   const E = root.KK, FMT = root.KK_FMT, AR = root.KK_ARENA, UI = root.KK_UI, AU = root.KK_AUDIO, CL = root.KK_CLOUD, FX = root.KK_FX;
+  const ST = root.KK_STORY, LOOT = root.KK_LOOT;
   const KEY = 'kritzelkrieg-save-v1';
   let state = null;
   let lastFrame = 0, hudAcc = 0, uiAcc = 0, saveAcc = 0, cloudAcc = 0;
@@ -38,6 +39,8 @@
   function refreshPalette() {
     pal = AR.readPalette();
     UI.setPalette(pal);
+    if (ST) ST.setPalette(pal);
+    if (LOOT) LOOT.setPalette(pal);
     UI.update(Date.now(), true);
   }
   function applyTheme() {
@@ -57,6 +60,29 @@
   function wantTrack() {
     const e = state.enemy;
     return e && e.boss && e.hp > 0 ? 'boss' : 'z' + E.zoneIndex(state.stage);
+  }
+  function story(id, cb) {
+    if (state.story.seen[id]) { if (cb) cb(); return false; }
+    state.story.seen[id] = true;
+    ST.play(id, () => { state.lastTick = Date.now(); if (cb) cb(); });
+    saveLocal();
+    return true;
+  }
+  function storyFor(ev) {
+    if (ev.t === 'cleared') {
+      if (ev.stage % 10 === 0 && ev.stage <= 60) story('ch' + (ev.stage / 10 + 1));
+      if (ev.stage === 24) story('mega');
+      if (ev.stage === 99) story('finale');
+    }
+    if (ev.t === 'ascend' && state.ascensions === 1) setTimeout(() => story('newbook'), 400);
+  }
+  function starsPop(n) {
+    const h = document.getElementById('hudStars');
+    if (!h) return;
+    h.classList.remove('bump'); void h.offsetWidth; h.classList.add('bump');
+    const r = h.getBoundingClientRect();
+    FX.sparkles(r.left + r.width / 2, r.top + r.height / 2, 6 + Math.min(10, n));
+    AU.play('star');
   }
   function daily() {
     const res = E.claimDaily(state, Date.now());
@@ -135,6 +161,8 @@
       AR.onEvent(ev, bulk);
       if (!bulk || ev.t === 'level' || ev.t === 'ach') UI.onEvent(ev);
       if (!bulk) sound(ev);
+      if (ev.t === 'stars' && !bulk) starsPop(ev.n);
+      storyFor(ev);
     }
   }
 
@@ -144,6 +172,7 @@
     const now = Date.now();
     const dt = lastFrame ? Math.min(0.1, Math.max(0, (ts - lastFrame) / 1000)) : 0.016;
     lastFrame = ts;
+    if (ST.open) { state.lastTick = now; return; }
     stepSim(now);
     drain();
     AR.frame(dt, now);
@@ -151,7 +180,11 @@
     UI.campFrame(dt);
     AU.setTrack(wantTrack());
     hudAcc += dt; if (hudAcc >= 0.066) { hudAcc = 0; UI.hud(now); }
-    uiAcc += dt; if (uiAcc >= 0.25) { uiAcc = 0; UI.update(now); }
+    uiAcc += dt; if (uiAcc >= 0.25) {
+      uiAcc = 0; UI.update(now);
+      document.getElementById('badgeLoot').hidden = !LOOT.badge();
+      if (UI.tab === 'loot' && !LOOT.open) LOOT.render(false);
+    }
     saveAcc += dt; if (saveAcc >= 10) { saveAcc = 0; saveLocal(); }
     cloudAcc += dt; if (cloudAcc >= 60) { cloudAcc = 0; saveCloud(); }
   }
@@ -218,7 +251,7 @@
     canvas.addEventListener('contextmenu', e => e.preventDefault());
     document.addEventListener('pointerdown', () => AU.unlock(), { once: true, capture: true });
     document.addEventListener('keydown', e => {
-      if (e.repeat || UI.modalOpen()) return;
+      if (e.repeat || UI.modalOpen() || ST.open || LOOT.open) return;
       const tag = (e.target && e.target.tagName) || '';
       if (tag === 'TEXTAREA' || tag === 'INPUT') return;
       if ((e.code === 'Space' || e.key === 'Enter') && tag !== 'BUTTON') {
@@ -297,13 +330,21 @@
     });
     FX.setPalette(pal);
     UI.init(() => state, actions, pal);
+    ST.init(pal);
+    LOOT.init(() => state, { drain, save: saveLocal, refresh: () => { UI.update(Date.now(), true); UI.hud(Date.now()); } }, pal);
+    document.getElementById('tabs').addEventListener('click', e => {
+      const b = e.target.closest('button[data-tab]');
+      if (b && b.dataset.tab === 'loot') { story('loot'); LOOT.render(true); }
+    });
+    document.getElementById('hudStars').addEventListener('click', () => { UI.showTab('loot'); story('loot'); LOOT.render(true); });
     applyTheme();
     bindInput();
     UI.update(Date.now(), true);
     UI.hud(Date.now());
     root.requestAnimationFrame(frame);
     cloudBoot();
-    setTimeout(daily, 900);
+    if (!state.story.seen.intro) setTimeout(() => story('intro', () => setTimeout(daily, 300)), 300);
+    else setTimeout(daily, 900);
 
     try {
       const h = root.claude && root.claude.hot;

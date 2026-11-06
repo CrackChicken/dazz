@@ -2,6 +2,12 @@
 
 Ein Idle-Clicker-Webspiel mit Strichmännchen, gezeichnet wie mit Filzstiften im Schulheft (im dunklen Modus mit bunter Kreide auf der Tafel). Läuft im Browser auf **iPhone/iPad (Safari)** und **PC/Mac** – ohne Installation, ohne Build-Schritt, ohne Server-Code.
 
+## Die Geschichte
+
+Montag, dritte Stunde, Mathe. Toni langweilt sich und kritzelt einen kleinen Helden mit gelbem Stirnband an den Heftrand. Plötzlich wird die Tinte lebendig. Aber Frau Dr. Rotstift hat alles gesehen: Jede rote Korrektur verwandelt sich in einen Kritzler, der das Heft ausradieren will. Kapitel für Kapitel kämpft sich der Held durch Toni's Hefte (Erdkunde, Zeichenblock, Physik, Bastelheft …), bis zum Urdrachen aus dem umgekippten Tintenfass und zur letzten Seite.
+
+Die Geschichte wird in gezeichneten Comic-Cutscenes erzählt: Intro, jedes neue Kapitel, der Urdrache, das erste neue Heft (Aufstieg) und die Pausenglocke bei Stufe 100. Gesehene Szenen lassen sich unter *Mehr → Geschichte* erneut ansehen.
+
 ## Spielprinzip
 
 - **Klicken / Tippen:** Tippe auf die Arena, dein Held schlägt zu. Mehrere Finger zählen einzeln, kritische Treffer machen Extraschaden.
@@ -15,7 +21,14 @@ Ein Idle-Clicker-Webspiel mit Strichmännchen, gezeichnet wie mit Filzstiften im
 - **Level-System:** Besiegte Gegner geben EP. Jedes Level bringt ×1,03 auf Gold und Schaden und einen Talentpunkt für 9 Talente (Klickkraft, DPS, Gier, Krit-Chance, Synergie …).
 - **Fähigkeiten:** Wutanfall (doppelter Schaden), Goldrausch (dreifaches Gold), Schattenklone (Auto-Klicks), Tintenmeteor (Sofortschaden) – freigeschaltet über das Level.
 - **Aufstieg (Prestige):** Ab Stufe 40 kannst du neu anfangen und bekommst Seelen. Jede Seele gibt dauerhaft +10 % auf alles. Level, Talente und Erfolge bleiben.
-- **36 Erfolge:** jeder gibt +2 % auf alles.
+- **Beute und Glücksspiel (nur mit Spielwährung):**
+  - **Goldsternchen** gibt es für Bosse, Erfolge, jedes 5. Level, den Tagesbonus, den Goldflieger, Truhen-Jackpots und jeden Aufstieg.
+  - **Sticker-Wundertüte** (10 ★, 10er-Tüte 90 ★): Items und Skins in sechs Seltenheiten – Gewöhnlich, Selten, Sehr selten, Episch, Legendär, Mythisch. Spannende Aufdeck-Animation, Legendär spätestens nach 60 Ziehungen garantiert, in jeder 10er-Tüte mindestens „Sehr selten“. Wahrscheinlichkeiten sind im Spiel einsehbar.
+  - **Kaugummiautomat:** ein Item gegen Gold.
+  - **Glücksrad:** alle 4 Stunden eine Gratis-Drehung.
+- **Items:** 24 Ausrüstungsgegenstände für vier Plätze (Waffe, Banner, Talisman, Ranzen), z. B. „Goldener Füller“ oder „Zeitmaschine aus Pappe“. Doppelte Items steigen eine Stufe auf. Jedes gesammelte Item gibt zusätzlich +1 % Gold und DPS.
+- **Skins:** 6 Helden-Skins (Schlafanzug, Piratenkapitän, Ritter, Superheld, Feuerdämon, Regenbogen-Einhorn) und 6 Stile für jeden der 16 Kämpfer (Bunt, Partyhut, Neon, Schatten, Goldene Edition, Regenbogen) – insgesamt 102 Skins. Jeder gibt +1 % DPS.
+- **36 Erfolge:** jeder gibt +2 % auf alles und 5 Sternchen.
 - **Sound:** Eigener Soundtrack pro Kapitel und ein treibender Boss-Track, live per WebAudio erzeugt, dazu Effekte für Treffer, Münzen (mit steigender Tonhöhe), Level-Ups, Truhen und Bosse. Musik und Effekte lassen sich getrennt abschalten.
 - **Exponentielles Wachstum:** Zahlen laufen von 1 bis weit über Dezillionen (K, M, B, T, Qa, Qi … oder wissenschaftliche Schreibweise).
 
@@ -47,7 +60,8 @@ Ein Idle-Clicker-Webspiel mit Strichmännchen, gezeichnet wie mit Filzstiften im
 ```
 index.html            Markup, lädt alles
 css/style.css         Layout (Telefon einspaltig, breit zweispaltig), Heft-/Tafel-Design
-js/data.js            Alle Inhalte und Balancing-Konstanten
+js/data.js            Kämpfer, Arbeiter, Talente, Bosse und Balancing-Konstanten
+js/content.js         Seltenheiten, Items, Skins, Glücksrad, Story-Texte
 js/engine.js          Spiellogik ohne DOM (auch in Node lauffähig)
 js/format.js          Zahlen- und Zeitformat
 js/art.js             Strichmännchen-Zeichner: Posen, Waffen, Accessoires
@@ -55,6 +69,8 @@ js/monsters.js        Monster und Bosse (Drache, Krake, Hydra …) mit Angriffsa
 js/arena.js           Kampfszene auf Canvas: Kulissen, Boss-Intros, Projektile, Truhen, Partikel
 js/fx.js              Effekt-Ebene: Münzen fliegen in den Goldzähler, Konfetti
 js/ui.js              Listen, Talente, Aufstieg, Erfolge, Einstellungen, Dialoge
+js/story.js           Comic-Cutscenes (gezeichnete Panels mit Schreibmaschinen-Text)
+js/loot.js            Beute-Tab: Wundertüte, Kaugummiautomat, Glücksrad, Ausrüstung, Garderobe
 js/audio.js           Soundeffekte und prozeduraler Soundtrack (WebAudio, keine Dateien)
 js/cloud.js           Optionaler Cloud-Spielstand (nur als claude.ai-Artifact)
 js/main.js            Start, Spielschleife, Eingabe, Speichern, Offline-Fortschritt

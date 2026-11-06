@@ -369,7 +369,7 @@
         }
         break;
       case 'planeCatch': {
-        const lbl = { gold: '+' + FMT.fmt(ev.gold || 0), jackpot: 'JACKPOT +' + FMT.fmt(ev.gold || 0), frenzy: 'RASEREI: ×3 DPS', clickstorm: 'KLICKSTURM: ×5', cooldown: 'FÄHIGKEITEN BEREIT!' }[ev.kind];
+        const lbl = { stars: '+3 ★', gold: '+' + FMT.fmt(ev.gold || 0), jackpot: 'JACKPOT +' + FMT.fmt(ev.gold || 0), frenzy: 'RASEREI: ×3 DPS', clickstorm: 'KLICKSTURM: ×5', cooldown: 'FÄHIGKEITEN BEREIT!' }[ev.kind];
         const p = lastPlane || { x: W / 2, y: H * 0.3 };
         text(Math.min(W - 80, Math.max(80, p.x)), p.y, lbl, { color: pal.goldInk, size: 26, vy: -20, life: 1.8, pop: 1.8 });
         const cl = toClient(p.x, p.y);
@@ -505,8 +505,9 @@
         ctx.beginPath(); ctx.arc(m.x, m.y - m.h * 0.5, m.h * (0.6 + Math.sin(t * 10) * 0.05), 0, TAU); ctx.fill(); ctx.restore();
         if (st.msText) { st.msText = false; text(m.x, m.y - m.h * 1.2, '×' + E.B.fighterMilestoneMult + '!', { color: col, size: 22, life: 1.3, pop: 1.8 }); }
       }
-      const o = A.looks(m.f.look, pal, col);
+      const o = A.skin(A.looks(m.f.look, pal, col), id, s.wear[id], pal, t, m.f.color);
       o.dir = 1;
+      if (o.fx && Math.random() < d * 4) parts.push({ k: 'star', x: m.x + (Math.random() - 0.5) * m.h * 0.5, y: m.y - Math.random() * m.h, vx: 0, vy: -30, life: 0.7, t: 0 });
       if (rage) aura(m.x, m.y, m.h, pal.m.red, 0.6);
       if (frenzy) aura(m.x, m.y, m.h, pal.m.orange, 0.8);
       stick(ctx, m.x, m.y, m.h * (m.f.look === 'titan' || m.f.look === 'origin' ? 1.25 : 1), pose, o);
@@ -533,7 +534,10 @@
       if (hero.hurt > 0) { hero.hurt -= d; pose = mix(pose, POSES.hurt, Math.min(1, hero.hurt * 4)); lunge -= hero.hurt * 30; }
       if (rage) aura(L.heroX + lunge, ground, L.heroH, pal.m.red, 1);
       if (storm) { ctx.save(); ctx.globalAlpha = 0.4 + 0.2 * Math.sin(t * 12); ctx.fillStyle = pal.m.blue; ctx.beginPath(); ctx.arc(L.heroX + lunge, ground - L.heroH * 0.55, L.heroH * 0.55, 0, TAU); ctx.fill(); ctx.restore(); }
-      stick(ctx, L.heroX + lunge, ground, L.heroH, pose, Object.assign(A.looks('hero', pal), { dir: 1, lw: Math.max(2.2, L.heroH * 0.055) }));
+      const ho = A.skin(A.looks('hero', pal), 'hero', s.wear.hero, pal, t);
+      if (ho.fx === 'fire' && Math.random() < d * 18) parts.push({ k: 'flame', x: L.heroX + lunge + (Math.random() - 0.5) * L.heroH * 0.3, y: ground - Math.random() * L.heroH * 0.9, vx: (Math.random() - 0.5) * 20, vy: -40 - Math.random() * 40, t: 0, life: 0.5, r: 2 + Math.random() * 3 });
+      if (ho.fx === 'sparkle' && Math.random() < d * 10) parts.push({ k: 'star', x: L.heroX + lunge + (Math.random() - 0.5) * L.heroH * 0.5, y: ground - Math.random() * L.heroH, vx: -20, vy: -20, life: 0.8, t: 0 });
+      stick(ctx, L.heroX + lunge, ground, L.heroH, pose, Object.assign(ho, { dir: 1, lw: Math.max(2.2, L.heroH * 0.055) }));
     }
 
     // Schattenklone

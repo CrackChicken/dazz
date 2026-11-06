@@ -1,9 +1,9 @@
 /* Kritzelkrieg – Service Worker: Netzwerk zuerst, Cache als Rückfall (offline spielbar). */
-const CACHE = 'kritzelkrieg-v2';
+const CACHE = 'kritzelkrieg-v3';
 const FILES = [
   './', './index.html', './css/style.css', './manifest.webmanifest',
-  './js/data.js', './js/engine.js', './js/format.js', './js/art.js', './js/monsters.js', './js/audio.js',
-  './js/cloud.js', './js/fx.js', './js/arena.js', './js/ui.js', './js/main.js',
+  './js/data.js', './js/content.js', './js/engine.js', './js/format.js', './js/art.js', './js/monsters.js', './js/audio.js',
+  './js/cloud.js', './js/fx.js', './js/arena.js', './js/ui.js', './js/story.js', './js/loot.js', './js/main.js',
   './icons/icon-192.png', './icons/icon-512.png', './icons/apple-touch-icon.png'
 ];
 

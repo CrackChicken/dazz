@@ -3,12 +3,16 @@
   'use strict';
   const isNode = typeof module !== 'undefined' && module.exports;
   const D = isNode ? require('./data.js') : root.KK_DATA;
+  const C = isNode ? require('./content.js') : root.KK_CONTENT;
+  const RAR = C.rarities;
+  const RI = Object.fromEntries(RAR.map((r, i) => [r.id, i]));
   const B = D.BAL;
   const SAVE_VERSION = 1;
   const MAX_NUM = 1e300;
 
   const byId = arr => Object.fromEntries(arr.map(x => [x.id, x]));
-  const F = byId(D.fighters), W = byId(D.workers), T = byId(D.talents), K = byId(D.skills);
+  const F = byId(D.fighters), W = byId(D.workers), T = byId(D.talents), K = byId(D.skills), IT = byId(C.items);
+  const SLOT_STAT = Object.fromEntries(C.slots.map(x => [x.id, x.stat]));
 
   function clampNum(n) { return Number.isFinite(n) ? Math.min(n, MAX_NUM) : MAX_NUM; }
 
@@ -26,7 +30,14 @@
       souls: 0, ascensions: 0,
       ach: {},
       stats: { taps: 0, kills: 0, bossKills: 0, crits: 0, playTime: 0, bossFails: 0, maxHit: 0, offlineGold: 0, soulsEarned: 0,
-        maxCombo: 0, planes: 0, chests: 0, jackpots: 0, dragons: 0, megaKills: 0 },
+        maxCombo: 0, planes: 0, chests: 0, jackpots: 0, dragons: 0, megaKills: 0, starsEarned: 0, legendaries: 0, mythics: 0, pulls: 0 },
+      stars: 0,
+      inv: { items: {}, skins: {} },
+      equip: { waffe: null, banner: null, talisman: null, ranzen: null },
+      wear: { hero: 'classic' },
+      gacha: { pity: 0, gumRun: 0 },
+      wheel: { next: 0 },
+      story: { seen: {} },
       settings: { sound: true, music: true, sci: false, buy: 1, theme: 'auto' },
       combo: 0, comboT: 0,
       buffs: { frenzy: 0, clickstorm: 0 },
@@ -34,7 +45,7 @@
       daily: { day: '', streak: 0 },
       hints: {},
       lastTick: now, created: now, savedAt: 0,
-      _ev: [], _clone: 0, _achTimer: 0, _ac: 0
+      _ev: [], _clone: 0, _achTimer: 0, _ac: 0, _gear: null
     };
     for (const f of D.fighters) s.fighters[f.id] = 0;
     for (const w of D.workers) s.workers[w.id] = 0;
@@ -64,7 +75,7 @@
   function bounty(stage, boss) { return enemyHp(stage, boss) * B.goldPerHp * earlyGoldMult(stage); }
   function xpFor(stage, boss) { return Math.max(1, Math.round(stage * (boss ? 5 : 1))); }
   function xpNeed(level) { return Math.round(B.xpBaseNeed * Math.pow(B.xpGrowth, level - 1)); }
-  function bossDuration(s) { return B.bossTime + 2 * s.talents.endurance; }
+  function bossDuration(s) { return B.bossTime + 2 * s.talents.endurance + (s._gear ? s._gear.boss : 0); }
   function isMega(stage) { return stage % B.megaEvery === 0; }
   function bossInfo(stage) {
     const n = stage / B.bossEvery - 1;
@@ -101,11 +112,15 @@
     return (1 + B.soulBonus * s.souls) * Math.pow(B.levelBonus, s.level - 1) * (1 + B.achBonus * s._ac);
   }
   function buff(s, id, now) { return now != null && s.buffs[id] > now; }
+  function gear(s) { return s._gear || recalcGear(s); }
   function dpsMult(s, now) {
-    return globalMult(s) * (1 + 0.1 * s.talents.tactics) * (active(s, 'rage', now) ? 2 : 1) * (buff(s, 'frenzy', now) ? 3 : 1);
+    const g = gear(s);
+    return globalMult(s) * (1 + 0.1 * s.talents.tactics) * (active(s, 'rage', now) ? 2 : 1) * (buff(s, 'frenzy', now) ? 3 : 1) *
+      (1 + g.dps / 100) * (1 + 0.01 * (g.nItems + g.nSkins));
   }
   function goldMult(s, now) {
-    return globalMult(s) * (1 + 0.1 * s.talents.greed) * (active(s, 'goldrush', now) ? 3 : 1);
+    const g = gear(s);
+    return globalMult(s) * (1 + 0.1 * s.talents.greed) * (active(s, 'goldrush', now) ? 3 : 1) * (1 + g.gold / 100) * (1 + 0.01 * g.nItems);
   }
   function fame(s) { return Math.pow(B.fameGrowth, s.maxStage - 1); }
 
@@ -124,10 +139,11 @@
   function comboMult(s) { return 1 + Math.min(s.combo, B.comboMax) / B.comboMax; }
   function clickDamage(s, now) {
     const base = heroBaseDmg(s.hero) * (1 + 0.25 * s.talents.power) * globalMult(s) * (active(s, 'rage', now) ? 2 : 1);
-    return clampNum((base + totalDps(s, now) * clickSynergy(s)) * comboMult(s) * (buff(s, 'clickstorm', now) ? 5 : 1));
+    return clampNum((base + totalDps(s, now) * clickSynergy(s)) * comboMult(s) * (buff(s, 'clickstorm', now) ? 5 : 1) * (1 + gear(s).click / 100));
   }
-  function critChance(s) { return Math.min(0.9, B.critBase + 0.02 * s.talents.precision); }
-  function critMult(s) { return B.critMultBase + 0.5 * s.talents.force; }
+  function critChance(s) { return Math.min(0.9, B.critBase + 0.02 * s.talents.precision + gear(s).crit / 100); }
+  function critMult(s) { return B.critMultBase + 0.5 * s.talents.force + gear(s).critdmg; }
+  function comboWindow(s) { return B.comboWindow + gear(s).combo; }
 
   function workerMilestoneMult(count) {
     let m = 1;
@@ -221,6 +237,7 @@
       s.xp -= xpNeed(s.level);
       s.level++; s.points++;
       emit(s, { t: 'level', level: s.level });
+      if (s.level % 5 === 0) addStars(s, 2, 'level');
     }
   }
 
@@ -247,6 +264,7 @@
     }
     emit(s, { t: 'kill', gold: g, boss: e.boss, mega: e.mega, type: e.type, seed: e.seed });
     if (e.boss) openChest(s, g, e.mega);
+    if (e.boss && s.stage >= s.maxStage) addStars(s, e.mega ? 5 : 1, 'boss');
 
     if (s.stage >= s.maxStage) {
       s.kills++;
@@ -271,7 +289,7 @@
     const gold = clampNum(bossGold * (roll - 1));
     addGold(s, gold);
     s.stats.chests++;
-    if (roll >= 10) s.stats.jackpots++;
+    if (roll >= 10) { s.stats.jackpots++; addStars(s, 2, 'jackpot'); }
     emit(s, { t: 'chest', roll, gold });
   }
 
@@ -302,7 +320,7 @@
     if (!auto) {
       s.stats.taps++;
       s.combo = s.comboT > 0 ? s.combo + 1 : 1;
-      s.comboT = B.comboWindow;
+      s.comboT = comboWindow(s);
       if (s.combo > s.stats.maxCombo) s.stats.maxCombo = s.combo;
       if (s.combo === 10 || s.combo % 25 === 0) emit(s, { t: 'combo', n: s.combo });
     }
@@ -382,7 +400,7 @@
   function checkAchievements(s) {
     let changed = false;
     for (const a of D.achievements) {
-      if (!s.ach[a.id] && a.test(s)) { s.ach[a.id] = true; changed = true; emit(s, { t: 'ach', id: a.id }); }
+      if (!s.ach[a.id] && a.test(s)) { s.ach[a.id] = true; changed = true; emit(s, { t: 'ach', id: a.id }); addStars(s, 5, 'ach'); }
     }
     if (changed) recountAch(s);
     return changed;
@@ -399,10 +417,11 @@
     const kill = s.enemy ? enemyHp(s.stage, false) * B.goldPerHp * goldMult(s, null) : 0;
     const r = Math.random();
     let res;
-    if (r < 0.4) res = { kind: 'gold', gold: Math.max(inc * 90, kill * 15, 25) };
-    else if (r < 0.62) { s.buffs.frenzy = now + 30000; res = { kind: 'frenzy' }; }
-    else if (r < 0.82) { s.buffs.clickstorm = now + 20000; res = { kind: 'clickstorm' }; }
-    else if (r < 0.94) res = { kind: 'jackpot', gold: Math.max(inc * 600, kill * 80, 150) };
+    if (r < 0.36) res = { kind: 'gold', gold: Math.max(inc * 90, kill * 15, 25) };
+    else if (r < 0.55) { s.buffs.frenzy = now + 30000; res = { kind: 'frenzy' }; }
+    else if (r < 0.72) { s.buffs.clickstorm = now + 20000; res = { kind: 'clickstorm' }; }
+    else if (r < 0.85) { addStars(s, 3, 'plane'); res = { kind: 'stars', stars: 3 }; }
+    else if (r < 0.95) res = { kind: 'jackpot', gold: Math.max(inc * 600, kill * 80, 150) };
     else { for (const k of D.skills) s.skills[k.id].readyAt = 0; res = { kind: 'cooldown' }; }
     if (res.gold) { res.gold = clampNum(res.gold); addGold(s, res.gold); }
     emit(s, Object.assign({ t: 'planeCatch' }, res));
@@ -419,8 +438,137 @@
     const kill = enemyHp(Math.max(1, s.maxStage - 1), false) * B.goldPerHp * goldMult(s, null);
     const gold = clampNum(Math.max(incomePerSec(s, null) * 300, kill * 20, 50) * (1 + 0.5 * (day - 1)));
     addGold(s, gold);
+    const stars = 5 + 2 * day;
+    addStars(s, stars, 'daily');
     checkAchievements(s);
-    return { streak: s.daily.streak, day, gold };
+    return { streak: s.daily.streak, day, gold, stars };
+  }
+
+  /* ---------- Sternchen, Ausrüstung, Ziehungen ---------- */
+  function addStars(s, n, why) { s.stars += n; s.stats.starsEarned += n; emit(s, { t: 'stars', n, why }); }
+  function itemStatId(it) { return it.stat || SLOT_STAT[it.slot]; }
+  function itemValue(it, lvl) {
+    const r = RI[it.rarity], st = itemStatId(it);
+    if (C.special[st]) return C.special[st].vals[r] * (1 + 0.15 * (lvl - 1));
+    return RAR[r].pct * (1 + 0.25 * (lvl - 1));
+  }
+  function recalcGear(s) {
+    const g = { click: 0, dps: 0, gold: 0, crit: 0, critdmg: 0, combo: 0, boss: 0, offline: 0, nItems: 0, nSkins: 0 };
+    for (const slot in s.equip) {
+      const id = s.equip[slot], it = IT[id], lvl = s.inv.items[id];
+      if (it && lvl) g[itemStatId(it)] += itemValue(it, lvl);
+    }
+    for (const id in s.inv.items) if (IT[id] && s.inv.items[id] > 0) g.nItems++;
+    for (const k in s.inv.skins) if (s.inv.skins[k]) g.nSkins++;
+    s._gear = g;
+    return g;
+  }
+  function equipItem(s, id) {
+    const it = IT[id];
+    if (!it || !s.inv.items[id]) return false;
+    s.equip[it.slot] = s.equip[it.slot] === id ? null : id;
+    recalcGear(s);
+    emit(s, { t: 'equip', id });
+    return true;
+  }
+  function wearSkin(s, target, style) {
+    if (style !== 'classic' && style !== 'base' && !s.inv.skins[target + ':' + style]) return false;
+    s.wear[target] = style === 'base' ? undefined : style;
+    if (s.wear[target] === undefined) delete s.wear[target];
+    emit(s, { t: 'wear', target, style });
+    return true;
+  }
+  function rollRarity(rates) {
+    let tot = 0; for (const r of rates) tot += r;
+    let x = Math.random() * tot;
+    for (let i = 0; i < rates.length; i++) { x -= rates[i]; if (x < 0) return i; }
+    return 0;
+  }
+  function grant(s, ri, allowSkins) {
+    const rar = RAR[ri];
+    if (ri >= 4) s.stats.legendaries++;
+    if (ri >= 5) s.stats.mythics++;
+    if (allowSkins && Math.random() < C.machines.pack.skinChance) {
+      const hs = C.heroSkins.find(h => h.rarity === rar.id);
+      let target, style;
+      if (hs && Math.random() < 0.22) { target = 'hero'; style = hs.id; }
+      else { target = D.fighters[Math.floor(Math.random() * D.fighters.length)].id; style = C.fighterStyles.find(f => f.rarity === rar.id).id; }
+      const key = target + ':' + style;
+      if (s.inv.skins[key]) { addStars(s, rar.dup, 'dup'); return { kind: 'skin', target, style, rank: ri, dup: true, refund: rar.dup }; }
+      s.inv.skins[key] = true;
+      return { kind: 'skin', target, style, rank: ri, isNew: true };
+    }
+    const pool = C.items.filter(i => i.rarity === rar.id);
+    const it = pool[Math.floor(Math.random() * pool.length)];
+    const lvl = s.inv.items[it.id] || 0;
+    if (!lvl) {
+      s.inv.items[it.id] = 1;
+      if (!s.equip[it.slot]) s.equip[it.slot] = it.id;
+      else { const cur = IT[s.equip[it.slot]]; if (cur && RI[cur.rarity] < ri) s.equip[it.slot] = it.id; }
+      return { kind: 'item', id: it.id, rank: ri, isNew: true, lvl: 1 };
+    }
+    if (lvl < rar.maxLvl) { s.inv.items[it.id] = lvl + 1; return { kind: 'item', id: it.id, rank: ri, up: true, lvl: lvl + 1 }; }
+    addStars(s, rar.dup, 'dup');
+    return { kind: 'item', id: it.id, rank: ri, dup: true, refund: rar.dup, lvl };
+  }
+  function pullPack(s, n, free) {
+    const M = C.machines.pack;
+    const cost = free ? 0 : n === 10 ? M.cost10 : M.cost * n;
+    if (s.stars < cost) return null;
+    s.stars -= cost;
+    const res = [];
+    for (let i = 0; i < n; i++) {
+      s.gacha.pity++;
+      let ri = rollRarity(M.rates);
+      if (s.gacha.pity >= M.pity) ri = Math.max(ri, 4);
+      if (n === 10 && i === n - 1 && !res.some(r => r.rank >= 2)) ri = Math.max(ri, 2);
+      if (ri >= 4) s.gacha.pity = 0;
+      res.push(grant(s, ri, true));
+    }
+    s.stats.pulls += n;
+    recalcGear(s);
+    emit(s, { t: 'pull', machine: 'pack', n, best: Math.max(...res.map(r => r.rank)) });
+    checkAchievements(s);
+    return res;
+  }
+  function gumPrice(s) {
+    const kill = enemyHp(Math.max(1, s.maxStage - 1), false) * B.goldPerHp * goldMult(s, null);
+    return clampNum(Math.max(60, kill * 25) * Math.pow(1.15, s.gacha.gumRun));
+  }
+  function pullGum(s) {
+    const cost = gumPrice(s);
+    if (s.gold < cost) return null;
+    s.gold -= cost;
+    s.gacha.gumRun++;
+    const r = grant(s, rollRarity(C.machines.gum.rates), false);
+    s.stats.pulls++;
+    recalcGear(s);
+    emit(s, { t: 'pull', machine: 'gum', n: 1, best: r.rank });
+    checkAchievements(s);
+    return [r];
+  }
+  function wheelReady(s, now) { return now >= s.wheel.next; }
+  function spinWheel(s, now, paid) {
+    const Wh = C.wheel;
+    if (paid) { if (s.stars < Wh.spinCost) return null; s.stars -= Wh.spinCost; }
+    else { if (!wheelReady(s, now)) return null; s.wheel.next = now + Wh.freeEvery * 1000; }
+    const idx = rollRarity(Wh.segments.map(x => x.w));
+    const seg = Wh.segments[idx];
+    const inc = incomePerSec(s, null);
+    const kill = enemyHp(Math.max(1, s.maxStage - 1), false) * B.goldPerHp * goldMult(s, null);
+    const res = { index: idx, id: seg.id };
+    switch (seg.id) {
+      case 'stars1': addStars(s, 1, 'wheel'); res.stars = 1; break;
+      case 'stars3': addStars(s, 3, 'wheel'); res.stars = 3; break;
+      case 'stars10': addStars(s, 10, 'wheel'); res.stars = 10; break;
+      case 'jackpot': addStars(s, 25, 'wheel'); res.stars = 25; break;
+      case 'gold': res.gold = clampNum(Math.max(inc * 300, kill * 20, 100)); addGold(s, res.gold); break;
+      case 'gold4': res.gold = clampNum(Math.max(inc * 1200, kill * 80, 400)); addGold(s, res.gold); break;
+      case 'frenzy': s.buffs.frenzy = now + 60000; break;
+      case 'pack': res.pack = pullPack(s, 1, true); break;
+    }
+    emit(s, { t: 'wheel', id: seg.id });
+    return res;
   }
 
   /* ---------- Offline ---------- */
@@ -433,7 +581,7 @@
     const rate = 1 / (hp / dps + B.respawn);
     return { rate, gold: rate * bounty(st, isBoss(st)) * goldMult(s, null), xp: rate * xpFor(st, isBoss(st)), stage: st };
   }
-  function offlineEff(s) { return Math.min(1, B.offlineBaseEff + 0.05 * s.talents.dreamer); }
+  function offlineEff(s) { return Math.min(1.5, B.offlineBaseEff + 0.05 * s.talents.dreamer + gear(s).offline / 100); }
   function offlineCap() { return B.offlineCapHours * 3600; }
   function computeOffline(s, seconds) {
     const t = Math.min(seconds, offlineCap());
@@ -473,6 +621,8 @@
     for (const w of D.workers) s.workers[w.id] = 0;
     for (const k of D.skills) s.skills[k.id] = { readyAt: 0, activeUntil: 0 };
     s.buffs = { frenzy: 0, clickstorm: 0 }; s.combo = 0; s.comboT = 0;
+    s.gacha.gumRun = 0;
+    addStars(s, 10, 'ascend');
     emit(s, { t: 'ascend', gain });
     spawnEnemy(s);
     checkAchievements(s);
@@ -508,11 +658,13 @@
     if (!s.enemy || !(s.enemy.maxHp > 0)) spawnEnemy(s);
     if (s.spawnTimer > 0 || s.enemy.hp <= 0 || !s.enemy.type) spawnEnemy(s);
     recountAch(s);
+    recalcGear(s);
     return s;
   }
 
   const ENGINE = {
     D, B, F, W, T, K, SAVE_VERSION,
+    C, RAR, RI, IT, addStars, itemValue, itemStatId, recalcGear, gear, equipItem, wearSkin, pullPack, pullGum, gumPrice, spinWheel, wheelReady, comboWindow,
     newState, emit, isBoss, isMega, bossInfo, zoneIndex, buff, comboMult, openChest, incomePerSec, catchPlane, claimDaily, dayKey,
     enemyHp, bounty, xpFor, xpNeed, bossDuration, zoneOf,
     spawnEnemy, active, achCount, recountAch, globalMult, dpsMult, goldMult, fame,

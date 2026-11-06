@@ -107,6 +107,21 @@
     plane() { noise(0.6, 0.18, 800, 0.8, 'bandpass', { sweep: 2500 }); tone(1568, 0.3, 'sine', 0.05, { vib: 12 }); },
     planeCatch() { [1047, 1319, 1568, 2093, 2637].forEach((f, i) => tone(f, 0.14, 'sine', 0.12, { delay: i * 0.05 })); },
     combo(n) { const st = Math.min(12, Math.floor(n / 25) * 2); tone(523 * Math.pow(2, st / 12), 0.12, 'square', 0.08); tone(784 * Math.pow(2, st / 12), 0.16, 'square', 0.07, { delay: 0.06 }); },
+    page() { noise(0.18, 0.18, 2500, 0.8, 'bandpass', { sweep: 700 }); },
+    star() { if (!limit('star', 120)) return; tone(1568, 0.1, 'sine', 0.12); tone(2093, 0.16, 'sine', 0.1, { delay: 0.06 }); },
+    equip() { tone(440, 0.06, 'square', 0.07); tone(660, 0.1, 'square', 0.07, { delay: 0.05 }); },
+    tick() { tone(1800, 0.025, 'square', 0.05); },
+    win() { [784, 988, 1175, 1568].forEach((f, i) => tone(f, 0.2, 'triangle', 0.14, { delay: i * 0.08 })); },
+    charge(i) { const f = 330 * Math.pow(2, (i || 0) * 3 / 12); tone(f, 0.28, 'sawtooth', 0.08, { slide: f * 1.5, lp: 2500 }); noise(0.2, 0.08, 1200 + (i || 0) * 400, 1, 'bandpass'); },
+    burst(r) { noise(0.5, 0.4, 900, 0.5, 'lowpass', { sweep: 4000 }); tone(220 * Math.pow(2, (r || 0) / 4), 0.5, 'triangle', 0.25, { slide: 880 }); },
+    reveal(r) {
+      r = r || 0;
+      if (r <= 1) { tone(660 + r * 220, 0.12, 'triangle', 0.12); return; }
+      if (r <= 3) { [523, 659, 784, 1047].slice(0, r + 1).forEach((f, i) => tone(f * (r === 3 ? 1.12 : 1), 0.16, 'square', 0.07, { delay: i * 0.05, lp: 3200 })); return; }
+      [523, 659, 784, 1047, 1319, 1568].forEach((f, i) => tone(f, 0.3, 'square', 0.08, { delay: i * 0.06, lp: 3500 }));
+      [262, 330, 392, 523].forEach(f => tone(f * (r >= 5 ? 1.06 : 1), 1.2, 'triangle', 0.1, { delay: 0.35 }));
+      if (r >= 5) for (let i = 0; i < 8; i++) tone(2093 * Math.pow(2, i / 12), 0.1, 'sine', 0.06, { delay: 0.5 + i * 0.05 });
+    },
     daily() { [523, 659, 784, 1047, 784, 1047].forEach((f, i) => tone(f, 0.18, 'triangle', 0.14, { delay: i * 0.08 })); }
   };
 

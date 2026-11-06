@@ -64,6 +64,7 @@
     ctx.lineCap = 'round'; ctx.lineJoin = 'round';
     ctx.strokeStyle = o.color; ctx.lineWidth = lw;
     if (o.alpha != null) ctx.globalAlpha *= o.alpha;
+    if (o.glow) { ctx.shadowColor = o.glow; ctx.shadowBlur = o.glowBlur || Math.max(6, h * 0.12); }
 
     const limb = (a, b, c) => { ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y); ctx.lineTo(c.x, c.y); ctx.stroke(); };
     if (o.behind) o.behind(ctx, j);
@@ -388,6 +389,87 @@
     return o;
   }
 
+  /* ---------- Skins ---------- */
+  const ALT = { red: 'teal', orange: 'blue', yellow: 'purple', green: 'pink', teal: 'orange', blue: 'yellow', purple: 'green', pink: 'teal', brown: 'purple' };
+  function partyHat(c, j, a, b) {
+    const { x, y, r } = j.head;
+    c.save(); c.fillStyle = a;
+    c.beginPath(); c.moveTo(x - r * 0.8, y - r * 0.6); c.lineTo(x + j.dir * r * 0.15, y - r * 2.6); c.lineTo(x + r * 0.8, y - r * 0.6); c.closePath(); c.fill(); c.stroke();
+    c.strokeStyle = b; c.lineWidth = Math.max(1.2, j.lw * 0.8);
+    line(c, x - r * 0.5, y - r * 1.1, x + r * 0.45, y - r * 0.95); line(c, x - r * 0.25, y - r * 1.75, x + r * 0.3, y - r * 1.6);
+    c.fillStyle = b; c.beginPath(); c.arc(x + j.dir * r * 0.15, y - r * 2.7, r * 0.3, 0, TAU); c.fill();
+    c.restore();
+  }
+  function nightcap(c, j, col, t) {
+    const { x, y, r } = j.head, d = -j.dir, sw = Math.sin((t || 0) * 3) * r * 0.2;
+    c.save(); c.fillStyle = col;
+    c.beginPath(); c.moveTo(x - r * 1.05, y - r * 0.3); c.quadraticCurveTo(x - r * 0.2, y - r * 2.2, x + d * r * 1.9 + sw, y - r * 0.2); c.lineTo(x + r * 1.05, y - r * 0.4); c.closePath(); c.fill(); c.stroke();
+    c.fillStyle = '#ffffff'; c.beginPath(); c.arc(x + d * r * 1.95 + sw, y - r * 0.1, r * 0.32, 0, TAU); c.fill(); c.stroke();
+    c.restore();
+  }
+  function bicorne(c, j, col, trim) {
+    const { x, y, r } = j.head;
+    c.save(); c.fillStyle = col;
+    c.beginPath(); c.moveTo(x - r * 1.9, y - r * 0.55); c.quadraticCurveTo(x, y - r * 2.4, x + r * 1.9, y - r * 0.55); c.quadraticCurveTo(x, y - r * 1.0, x - r * 1.9, y - r * 0.55); c.fill(); c.stroke();
+    c.fillStyle = trim; c.beginPath(); c.arc(x, y - r * 1.25, r * 0.28, 0, TAU); c.fill();
+    c.restore();
+  }
+  function plumeHelmet(c, j, fill, plumeCol, t) {
+    helmet(c, j, fill);
+    const { x, y, r } = j.head, d = -j.dir;
+    c.save(); c.strokeStyle = plumeCol; c.lineWidth = Math.max(2, j.lw * 1.6);
+    for (let i = 0; i < 3; i++) { c.beginPath(); c.moveTo(x, y - r * 1.05); c.quadraticCurveTo(x + d * r * (0.8 + i * 0.3), y - r * (2.2 - i * 0.2) + Math.sin((t || 0) * 4 + i) * r * 0.1, x + d * r * (1.6 + i * 0.25), y - r * (1.2 - i * 0.25)); c.stroke(); }
+    c.restore();
+  }
+  function domino(c, j, col) {
+    const { x, y, r } = j.head;
+    c.save(); c.fillStyle = col;
+    c.beginPath(); c.ellipse(x + j.dir * r * 0.15, y - r * 0.15, r * 0.95, r * 0.32, 0, 0, TAU); c.fill();
+    c.fillStyle = '#ffffff'; c.beginPath(); c.arc(x + j.dir * r * 0.4, y - r * 0.15, r * 0.14, 0, TAU); c.fill();
+    c.restore();
+  }
+  function unicornHorn(c, j, col) {
+    const { x, y, r } = j.head;
+    c.save(); c.fillStyle = col;
+    c.beginPath(); c.moveTo(x + j.dir * r * 0.05, y - r * 0.85); c.lineTo(x + j.dir * r * 0.65, y - r * 2.6); c.lineTo(x + j.dir * r * 0.6, y - r * 0.75); c.closePath(); c.fill(); c.stroke();
+    c.restore();
+  }
+  function emblem(c, j, col, letter) {
+    const mx = (j.neck.x * 2 + j.hip.x) / 3, my = (j.neck.y * 2 + j.hip.y) / 3, r = j.h * 0.07;
+    c.save(); c.fillStyle = col; c.beginPath(); c.arc(mx, my, r, 0, TAU); c.fill(); c.lineWidth = Math.max(1, j.lw * 0.6); c.stroke();
+    c.fillStyle = '#c4372f'; c.font = `${Math.round(r * 1.5)}px sans-serif`; c.textAlign = 'center'; c.textBaseline = 'middle'; c.fillText(letter, mx, my + r * 0.05);
+    c.restore();
+  }
+  // Wendet einen Skin auf Zeichenoptionen an. target = 'hero' oder Kämpfer-ID, base = Farbname des Kämpfers.
+  function skin(o, target, style, pal, t, base) {
+    if (!style || style === 'classic') return o;
+    const m = pal.m || {};
+    const front = o.front, behind = o.behind;
+    const hue = (t || 0) * 140 % 360;
+    o.fx = null;
+    if (target === 'hero') {
+      switch (style) {
+        case 'pyjama': o.color = m.blue || o.color; o.behind = null; o.front = (c, j) => nightcap(c, j, m.teal, t); break;
+        case 'pirate': o.behind = (c, j) => cape(c, j, '#2b2b2b'); o.front = (c, j) => { patch(c, j); bicorne(c, j, '#2b2b2b', pal.gold); }; break;
+        case 'knight': o.color = m.teal || o.color; o.front = (c, j) => plumeHelmet(c, j, soft(pal, m.teal, 0.45), m.red, t); o.behind = (c, j) => { cape(c, j, m.blue); shield(c, j, j.h * 0.15, soft(pal, m.yellow, 0.6)); }; break;
+        case 'super': o.color = m.blue || o.color; o.behind = (c, j) => cape(c, j, m.red); o.front = (c, j) => { domino(c, j, m.red); emblem(c, j, pal.gold, 'K'); }; break;
+        case 'fire': o.color = m.red || o.color; o.glow = m.orange; o.fx = 'fire'; o.front = (c, j) => { horns(c, j); headband(c, j, m.yellow, true); }; o.behind = (c, j) => cape(c, j, m.orange); break;
+        case 'unicorn': o.color = `hsl(${hue},85%,55%)`; o.glow = `hsl(${(hue + 60) % 360},90%,65%)`; o.fx = 'sparkle'; o.front = (c, j) => { unicornHorn(c, j, pal.gold); }; o.behind = (c, j) => cape(c, j, `hsl(${(hue + 180) % 360},80%,70%)`); break;
+      }
+      return o;
+    }
+    switch (style) {
+      case 'bunt': o.color = m[ALT[base]] || o.color; break;
+      case 'party': o.front = (c, j) => { if (front) front(c, j); partyHat(c, j, m.pink, m.yellow); }; break;
+      case 'neon': o.color = `hsl(${(hue + (base ? base.length * 40 : 0)) % 360},100%,52%)`; o.glow = o.color; o.glowBlur = 10; break;
+      case 'shadow': o.color = pal.ink; o.headFill = m.purple; o.eyeColor = pal.gold; o.glow = m.purple; break;
+      case 'gold': o.color = '#d9a400'; o.glow = '#ffd84a'; o.fx = 'sparkle'; break;
+      case 'rainbow': o.color = `hsl(${hue},90%,55%)`; o.glow = `hsl(${(hue + 90) % 360},90%,65%)`; o.fx = 'sparkle'; break;
+    }
+    if (style !== 'party') { o.front = front; o.behind = behind; }
+    return o;
+  }
+
   // Porträt in ein kleines Canvas zeichnen
   function portrait(canvas, look, pal, opts) {
     const dpr = Math.min(2, root.devicePixelRatio || 1);
@@ -399,11 +481,12 @@
     const o = looks(look, pal, opts && opts.locked ? pal.rule : (opts && opts.color) || pal.pencil);
     if (opts && opts.locked) { o.hand = null; o.front = null; o.behind = null; o.color = pal.rule; }
     if (opts && opts.ink) o.color = pal.ink;
+    if (opts && opts.skin && !opts.locked) skin(o, opts.skin.target, opts.skin.style, pal, 0.3, opts.skin.base);
     const pose = look === 'archer' ? POSES.aim : look === 'mage' || look === 'god' || look === 'chrono' ? POSES.cast :
       ['gatherer', 'lumber', 'miner', 'smith', 'factory'].includes(look) ? POSES.work : look === 'hero' ? POSES.guard : POSES.idle;
     stick(ctx, w * 0.5, h * 0.94, h * 0.7, pose, Object.assign(o, { dir: 1, lw: Math.max(1.4, h * 0.04) }));
   }
 
-  const ART = { TAU, POSES, mix, breathe, stick, looks, enemyLook, portrait, star, line, soft };
+  const ART = { TAU, POSES, mix, breathe, stick, looks, enemyLook, portrait, star, line, soft, skin };
   root.KK_ART = ART;
 })(typeof window !== 'undefined' ? window : globalThis);
