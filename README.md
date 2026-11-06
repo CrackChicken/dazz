@@ -4,7 +4,7 @@ Ein Idle-Clicker-Webspiel mit Strichmännchen, gezeichnet wie mit Filzstiften im
 
 ## Die Geschichte
 
-Montag, dritte Stunde, Mathe. Toni langweilt sich und kritzelt einen kleinen Helden mit gelbem Stirnband an den Heftrand. Plötzlich wird die Tinte lebendig. Aber Frau Dr. Rotstift hat alles gesehen: Jede rote Korrektur verwandelt sich in einen Kritzler, der das Heft ausradieren will. Kapitel für Kapitel kämpft sich der Held durch Toni's Hefte (Erdkunde, Zeichenblock, Physik, Bastelheft …), bis zum Urdrachen aus dem umgekippten Tintenfass und zur letzten Seite.
+Montag, dritte Stunde, Mathe. Toni langweilt sich und kritzelt einen kleinen Helden mit gelbem Stirnband an den Heftrand. Plötzlich wird die Tinte lebendig. Aber Frau Dr. Rotstift hat alles gesehen: Jede rote Korrektur verwandelt sich in einen Kritzler, der das Heft ausradieren will. Kapitel für Kapitel kämpft sich der Held durch Tonis Hefte (Erdkunde, Zeichenblock, Physik, Bastelheft …), bis zum Urdrachen aus dem umgekippten Tintenfass und zur letzten Seite.
 
 Die Geschichte wird in gezeichneten Comic-Cutscenes erzählt: Intro, jedes neue Kapitel, der Urdrache, das erste neue Heft (Aufstieg) und die Pausenglocke bei Stufe 100. Gesehene Szenen lassen sich unter *Mehr → Geschichte* erneut ansehen.
 
