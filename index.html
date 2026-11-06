@@ -37,7 +37,7 @@
       </div>
     </div>
     <button class="hud-level" id="hudLevel" type="button" aria-label="Level und Talente">
-      <span class="hud-lv">Lv <b id="hudLv">1</b></span>
+      <span class="hud-lv">Lv <b id="hudLv">1</b> <span class="hud-title" id="hudTitle"></span></span>
       <span class="xpbar" aria-hidden="true"><i id="hudXp"></i></span>
     </button>
     <button class="hud-stars" id="hudStars" type="button" aria-label="Sternchen und Beute"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3l2.6 5.6 6 .7-4.5 4.1 1.2 6L12 16.4 6.7 19.4l1.2-6L3.4 9.3l6-.7z"/></svg><b id="hudStarsN">0</b></button>
@@ -83,6 +83,13 @@
     <button type="button" role="tab" data-tab="more" aria-selected="false"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 4h9l3 3v13H8z"/><path d="M11 10h6M11 14h6M4 7v13h4"/></svg><span>Mehr</span></button>
   </nav>
 
+  <aside class="side" id="side" aria-label="Charakter">
+    <h3>Held</h3>
+    <dl class="statsheet" id="statsSide"></dl>
+    <h3>Ausrüstung</h3>
+    <div class="side-gear" id="sideGear"></div>
+  </aside>
+
   <main class="panel" id="panel">
     <section class="pane" data-pane="fighters">
       <div class="pane-head">
@@ -92,6 +99,7 @@
         </div>
         <div class="buybar" data-buybar></div>
       </div>
+      <div class="autobuy" id="autoBuy"></div>
       <div class="list" id="listFighters"></div>
     </section>
 
@@ -113,7 +121,7 @@
         <div class="stars-big"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3l2.6 5.6 6 .7-4.5 4.1 1.2 6L12 16.4 6.7 19.4l1.2-6L3.4 9.3l6-.7z"/></svg><b id="lootStars">0</b><span>Sternchen</span></div>
         <p class="sub">Goldsternchen gibt es für Bosse, Erfolge, jedes 5. Level, den Tagesbonus, den Goldflieger und jeden Aufstieg.</p>
       </div>
-      <div class="seg sub-seg" id="lootSeg"><button type="button" data-v="pull">Ziehen</button><button type="button" data-v="gear">Ausrüstung</button><button type="button" data-v="skins">Skins</button></div>
+      <div class="seg sub-seg" id="lootSeg"><button type="button" data-v="pull">Ziehen</button><button type="button" data-v="gear">Ausrüstung</button><button type="button" data-v="skins">Skins</button><button type="button" data-v="shop">Shop</button></div>
       <div data-sub="pull">
         <div class="machine m-pack">
           <div class="m-art pack-mini" aria-hidden="true"><span>WUNDER-TÜTE</span></div>
@@ -148,6 +156,10 @@
         <h3>Sammlung <span class="pts" id="invCount"></span></h3>
         <div class="inv" id="inv"></div>
       </div>
+      <div data-sub="shop" hidden>
+        <p class="sub">Vorschau auf kosmetische Inhalte. Es gibt keine echten Käufe und keine Spielvorteile. Zahlungen sind deaktiviert.</p>
+        <div class="shop" id="shop"></div>
+      </div>
       <div data-sub="skins" hidden>
         <p class="sub" id="skinSum"></p>
         <div class="wardrobe" id="wardrobe"></div>
@@ -155,6 +167,8 @@
     </section>
 
     <section class="pane" data-pane="talents" hidden>
+      <h3 class="first">Heldenwerte</h3>
+      <dl class="statsheet" id="statsTab"></dl>
       <div class="lvcard">
         <div class="lvbig">Level <b id="tLv">1</b></div>
         <div class="xpbar big" aria-hidden="true"><i id="tXp"></i></div>
@@ -174,12 +188,16 @@
       </div>
       <div class="asc-gain">
         <p id="aGainText"></p>
+        <div class="asc-preview" id="aPreview"></div>
         <button class="big-btn" id="btnAscend" type="button">Aufsteigen</button>
       </div>
+      <h3>Seelenbaum <span class="pts" id="aCrystals"></span></h3>
+      <p class="sub">Jeder Aufstieg bringt Tintenkristalle. Damit schaltest du dauerhafte Verbesserungen und neue Mechaniken frei: Auto-Kauf, automatische Fähigkeiten, Startvorsprung, Elitejagd.</p>
+      <div class="tree" id="tree"></div>
       <h3>So funktioniert der Aufstieg</h3>
       <ul class="rules">
-        <li>Du beginnst wieder bei Stufe 1. Gold, Kämpfer, Held und Arbeiter werden zurückgesetzt.</li>
-        <li>Du behältst Seelen, Level, Talente, Erfolge und Statistiken.</li>
+        <li>Du beginnst wieder bei Stufe 1. Gold, Kämpfer, Held, Training und Arbeiter werden zurückgesetzt.</li>
+        <li>Du behältst Seelen, Tintenkristalle, Seelenbaum, Level, Talente, Items, Skins, Erfolge und Statistiken.</li>
         <li>Jede Seele gibt dauerhaft <b>+10 %</b> auf Gold und Schaden.</li>
         <li>Seelen pro Aufstieg: (höchste Stufe − 30)<sup>2,5</sup> ÷ 40. Tiefer kommen lohnt sich überproportional.</li>
       </ul>
@@ -192,8 +210,22 @@
       <div class="achs" id="achs"></div>
       <h3>Statistik</h3>
       <dl class="stats" id="stats"></dl>
+      <h3>Titel</h3>
+      <div class="codex" id="titles"></div>
       <h3>Einstellungen</h3>
       <div class="settings">
+        <div class="set-row"><span>Grafik</span><div class="seg" id="setGfx"><button type="button" data-v="auto">Auto</button><button type="button" data-v="low">Niedrig</button><button type="button" data-v="med">Mittel</button><button type="button" data-v="high">Hoch</button></div></div>
+        <div class="set-row"><label for="setFx">Effekt-Stärke</label><input type="range" id="setFx" min="0" max="100" step="10"></div>
+        <div class="set-row"><span>Bildrate</span><div class="seg" id="setFps"><button type="button" data-v="30">30</button><button type="button" data-v="60">60</button><button type="button" data-v="0">Max</button></div></div>
+        <div class="set-row"><span>Energiesparen</span><div class="seg" id="setEco"><button type="button" data-v="1">An</button><button type="button" data-v="0">Aus</button></div></div>
+        <div class="set-row"><span>Bildschirmwackeln</span><div class="seg" id="setShake"><button type="button" data-v="1">An</button><button type="button" data-v="0">Aus</button></div></div>
+        <div class="set-row"><span>Schadenszahlen</span><div class="seg" id="setNumbers"><button type="button" data-v="1">An</button><button type="button" data-v="0">Aus</button></div></div>
+        <div class="set-row"><span>Auto-Ausrüsten</span><div class="seg" id="setAutoEquip"><button type="button" data-v="1">An</button><button type="button" data-v="0">Aus</button></div></div>
+        <div class="set-row"><span>Auto-Fähigkeiten</span><div class="seg" id="setAutoSkills"><button type="button" data-v="1">An</button><button type="button" data-v="0">Aus</button></div></div>
+        <div class="set-row"><span>Vibration</span><div class="seg" id="setHaptics"><button type="button" data-v="1">An</button><button type="button" data-v="0">Aus</button></div></div>
+        <div class="set-row"><label for="setMusicVol">Musik-Lautstärke</label><input type="range" id="setMusicVol" min="0" max="100" step="5"></div>
+        <div class="set-row"><label for="setSfxVol">Effekt-Lautstärke</label><input type="range" id="setSfxVol" min="0" max="100" step="5"></div>
+        <div class="set-row desk-only"><span>Anzeige</span><button type="button" class="btn" id="btnFullscreen">Vollbild</button></div>
         <div class="set-row"><span>Musik</span><div class="seg" id="setMusic"><button type="button" data-v="1">An</button><button type="button" data-v="0">Aus</button></div></div>
         <div class="set-row"><span>Effekte</span><div class="seg" id="setSound"><button type="button" data-v="1">An</button><button type="button" data-v="0">Aus</button></div></div>
         <div class="set-row"><span>Zahlen</span><div class="seg" id="setSci"><button type="button" data-v="0">1,5M</button><button type="button" data-v="1">1,5e6</button></div></div>
@@ -227,6 +259,19 @@
   </main>
 
   <div class="toasts" id="toasts" aria-live="polite"></div>
+  <div class="menu" id="menu" hidden>
+    <div class="menu-inner">
+      <canvas id="menuArt" aria-hidden="true"></canvas>
+      <h1 class="menu-title">Kritzelkrieg</h1>
+      <p class="menu-sub">Ein Idle-Action-RPG aus dem Schulheft</p>
+      <div class="menu-btns">
+        <button type="button" class="big-btn hot" id="menuPlay">Weiterspielen</button>
+        <button type="button" class="btn" id="menuSettings">Einstellungen</button>
+        <button type="button" class="btn" id="menuStory">Geschichte</button>
+      </div>
+      <p class="menu-foot" id="menuFoot"></p>
+    </div>
+  </div>
   <div class="pull" id="pull" hidden>
     <div class="pull-stage">
       <button type="button" class="pack-big r0" id="packBig" aria-label="Tüte öffnen"><span>WUNDERTÜTE</span></button>
@@ -271,6 +316,7 @@
 <script src="js/ui.js"></script>
 <script src="js/story.js"></script>
 <script src="js/loot.js"></script>
+<script src="js/store.js"></script>
 <script src="js/main.js"></script>
 </body>
 </html>

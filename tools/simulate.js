@@ -20,7 +20,7 @@ let tapAcc = 0;
 let bossFailDps = 0, bossFailAt = 0;
 let lastProgressT = 0, lastMax = 1;
 const marks = new Set();
-const talentOrder = ['tactics', 'greed', 'synergy', 'power', 'foreman', 'precision', 'force', 'endurance', 'dreamer'];
+const talentOrder = ['tactics', 'greed', 'reflex', 'synergy', 'bulwark', 'power', 'vampire', 'foreman', 'precision', 'riposte', 'force', 'swift', 'endurance', 'dreamer'];
 let talentIdx = 0;
 let runStart = 0;
 
@@ -32,7 +32,17 @@ function fmt(n) {
 }
 function hms(t) { const h = Math.floor(t / 3600), m = Math.floor(t % 3600 / 60), sec = Math.floor(t % 60); return `${h}h${String(m).padStart(2, '0')}m${String(sec).padStart(2, '0')}s`; }
 
+function survive() {
+  // Lebenspunkte so hoch halten, dass der nächste Boss rund 14 Treffer braucht
+  const nb = Math.ceil(s.stage / 5) * 5;
+  const save = s.stage; s.stage = nb;
+  const hit = E.enemyDmg(s, { boss: true, mega: E.isMega(nb) }, false) * (1 - E.armorPct(s));
+  s.stage = save;
+  for (let g = 0; g < 50 && E.heroMaxHp(s) < hit * 14; g++) if (!E.buyTrain(s, 'vit', 1)) break;
+  for (const k of ['armor', 'tempo']) for (let g = 0; g < 10; g++) { const p = E.trainPrice(s, k, 1); if (p.cost > s.gold * 0.04) break; E.buyTrain(s, k, 1); }
+}
 function shop() {
+  survive();
   for (let guard = 0; guard < 200; guard++) {
     const gpd = E.B.goldPerHp * E.goldMult(s, null);
     const cands = [];
@@ -107,6 +117,7 @@ while (t < end) {
   }
   t += DT;
 }
+console.log(`K.O.: ${s.stats.kos}, Boss-Niederlagen: ${s.stats.bossFails}, Ausweichen ${s.stats.dodges}, Blocks ${s.stats.blocks}, Paraden ${s.stats.parries}, Konter ${s.stats.counters}, Vit ${s.vit}, Rüstung ${s.armor}, Tempo ${s.tempo}`);
 console.log(`Ende: ${hms(t)} Stufe ${s.maxStage} (beste ${s.bestStage}) Lv ${s.level} Seelen ${s.souls} Aufstiege ${s.ascensions} Erfolge ${s._ac}`);
 console.log('Kämpfer:', D.fighters.map(f => f.id + '=' + s.fighters[f.id]).join(' '));
 console.log('Arbeiter:', D.workers.map(w => w.id + '=' + s.workers[w.id]).join(' '));

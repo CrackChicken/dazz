@@ -6,6 +6,11 @@
   let sfxOn = true, musicOn = true;
   const last = {};
   let coinStreak = 0, coinLast = 0;
+  // Sound-Pooling: aktive Stimmen zählen, leise Effekte bei Überlast weglassen
+  let voices = 0, sfxVol = 0.9, musicVol = 0.8;
+  const MAXV = 40;
+  const PRIO = { swing: 1, hit: 1, coin: 1, tick: 1, star: 1, buy: 2, dodge: 2, block: 2, parry: 3, counter: 2, hurt: 2, kill: 1, warn: 3, ko: 3, revive: 3, roar: 3, level: 3, reveal: 3, burst: 3, jackpot: 3, chest: 3, ach: 3, ascend: 3, daily: 3, planeCatch: 3 };
+  function track(node, dur) { voices++; node.onended = () => { voices = Math.max(0, voices - 1); }; void dur; }
 
   function ensure() {
     if (ac) { if (ac.state === 'suspended' && (sfxOn || musicOn) && !document.hidden) ac.resume(); return true; }
@@ -55,6 +60,7 @@
     if (opt.lp) { const f = ac.createBiquadFilter(); f.type = 'lowpass'; f.frequency.value = opt.lp; o.connect(f); node = f; }
     node.connect(g); g.connect(opt.bus || sfxBus);
     if (opt.send) g.connect(delay);
+    if (!opt.bus || opt.bus === sfxBus) track(o, dur);
     o.start(t0); o.stop(t0 + dur + 0.02);
   }
   function noise(dur, vol, freq, q, type, opt) {
@@ -64,7 +70,9 @@
     s.buffer = noiseBuf; f.type = type || 'bandpass'; f.frequency.setValueAtTime(freq, t0); f.Q.value = q || 1;
     if (opt.sweep) f.frequency.exponentialRampToValueAtTime(opt.sweep, t0 + dur);
     g.gain.setValueAtTime(vol, t0); g.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
-    s.connect(f); f.connect(g); g.connect(opt.bus || sfxBus); s.start(t0); s.stop(t0 + dur);
+    s.connect(f); f.connect(g); g.connect(opt.bus || sfxBus);
+    if (!opt.bus || opt.bus === sfxBus) track(s, dur);
+    s.start(t0); s.stop(t0 + dur);
   }
   function limit(name, ms) {
     const n = performance.now();
@@ -122,11 +130,37 @@
       [262, 330, 392, 523].forEach(f => tone(f * (r >= 5 ? 1.06 : 1), 1.2, 'triangle', 0.1, { delay: 0.35 }));
       if (r >= 5) for (let i = 0; i < 8; i++) tone(2093 * Math.pow(2, i / 12), 0.1, 'sine', 0.06, { delay: 0.5 + i * 0.05 });
     },
+    swing(a) {
+      a = a || {};
+      if (!limit('swing', a.crit || a.heavy ? 30 : 55)) return;
+      const w = a.w || 'fist', v = 0.9 + Math.random() * 0.2;
+      switch (w) {
+        case 'sword': case 'dual': noise(0.12, 0.22, 3200 * v, 1.2, 'highpass', { sweep: 1800 }); tone(1150 * v, 0.1, 'triangle', 0.08, { slide: 800 }); break;
+        case 'dagger': noise(0.06, 0.18, 4500 * v, 2, 'bandpass'); tone(1600 * v, 0.05, 'square', 0.04); break;
+        case 'axe': tone(95 * v, 0.2, 'sine', 0.35, { slide: 45 }); noise(0.16, 0.3, 600, 0.6, 'lowpass', { sweep: 150 }); break;
+        case 'rapier': tone(2100 * v, 0.12, 'sine', 0.08, { slide: 1600 }); noise(0.05, 0.12, 5000, 2, 'highpass'); break;
+        case 'magic': tone(420 * v, 0.18, 'sine', 0.12, { slide: 1300 }); tone(1800, 0.12, 'sine', 0.04, { delay: 0.06 }); break;
+        default: noise(0.07, 0.28, 900 * v, 0.8); tone(170 * v, 0.09, 'triangle', 0.22, { slide: 55 });
+      }
+      if (a.heavy) { tone(70, 0.25, 'sine', 0.35, { slide: 35 }); noise(0.2, 0.25, 300, 0.6, 'lowpass'); }
+      if (a.crit) { tone(1400, 0.12, 'square', 0.05, { slide: 2400 }); noise(0.1, 0.35, 1800, 0.8); }
+    },
+    dodge() { noise(0.18, 0.22, 900, 0.9, 'bandpass', { sweep: 2600 }); },
+    block() { tone(320, 0.12, 'square', 0.1, { lp: 2500 }); noise(0.1, 0.25, 2600, 5, 'bandpass'); },
+    parry() { tone(1760, 0.5, 'sine', 0.15); tone(2637, 0.4, 'sine', 0.08, { delay: 0.01 }); noise(0.05, 0.2, 6000, 3, 'highpass'); },
+    counter() { noise(0.14, 0.25, 2500, 1, 'highpass', { sweep: 900 }); tone(500, 0.18, 'sawtooth', 0.08, { slide: 1400, lp: 3000 }); },
+    hurt() { if (!limit('hurt', 90)) return; tone(220, 0.16, 'square', 0.1, { slide: 110, lp: 1400 }); noise(0.1, 0.2, 700, 0.8); },
+    warn() { tone(880, 0.12, 'square', 0.08); tone(880, 0.12, 'square', 0.08, { delay: 0.16 }); },
+    ko() { [392, 330, 262, 196].forEach((f, i) => tone(f, 0.25, 'triangle', 0.16, { delay: i * 0.12 })); noise(0.4, 0.3, 300, 0.6, 'lowpass'); },
+    revive() { [392, 523, 659, 784].forEach((f, i) => tone(f, 0.16, 'triangle', 0.13, { delay: i * 0.07 })); },
     daily() { [523, 659, 784, 1047, 784, 1047].forEach((f, i) => tone(f, 0.18, 'triangle', 0.14, { delay: i * 0.08 })); }
   };
 
   function play(name, arg) {
     if (!sfxOn || !ac || ac.state !== 'running') return;
+    const pr = PRIO[name] || 2;
+    if ((voices > MAXV && pr < 3) || (voices > MAXV * 0.6 && pr < 2)) return;
+    sfxBus.gain.setTargetAtTime(0.55 * sfxVol * (voices > 18 ? 0.75 : 1), ac.currentTime, 0.05);
     try { SFX[name] && SFX[name](arg); } catch (e) { /* Audio ist optional */ }
   }
 
@@ -246,12 +280,14 @@
   function applyMusic() {
     if (!ac) return;
     musicBus.gain.cancelScheduledValues(ac.currentTime);
-    musicBus.gain.setTargetAtTime(musicOn ? 0.32 : 0, ac.currentTime, 0.15);
+    musicBus.gain.setTargetAtTime(musicOn ? 0.32 * musicVol : 0, ac.currentTime, 0.15);
   }
 
   root.KK_AUDIO = {
     unlock, play, setTrack,
     setSfx(v) { sfxOn = !!v; if (ac && (sfxOn || musicOn)) ac.resume(); },
+    setVolumes(m, f) { musicVol = m; sfxVol = f; applyMusic(); },
+    get voices() { return voices; },
     setMusic(v) { musicOn = !!v; applyMusic(); },
     setEnabled(v) { this.setSfx(v); },
     suspend() { if (ac && ac.state === 'running') ac.suspend(); },

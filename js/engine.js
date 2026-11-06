@@ -30,22 +30,28 @@
       souls: 0, ascensions: 0,
       ach: {},
       stats: { taps: 0, kills: 0, bossKills: 0, crits: 0, playTime: 0, bossFails: 0, maxHit: 0, offlineGold: 0, soulsEarned: 0,
-        maxCombo: 0, planes: 0, chests: 0, jackpots: 0, dragons: 0, megaKills: 0, starsEarned: 0, legendaries: 0, mythics: 0, pulls: 0 },
-      stars: 0,
+        maxCombo: 0, planes: 0, chests: 0, jackpots: 0, dragons: 0, megaKills: 0, starsEarned: 0, legendaries: 0, mythics: 0, pulls: 0,
+        dodges: 0, blocks: 0, parries: 0, counters: 0, kos: 0, elites: 0, drops: 0, crystalsEarned: 0 },
+      stars: 0, crystals: 0, tree: {}, title: 'none',
+      vit: 0, armor: 0, tempo: 0,
+      cb: { hp: B.heroHpBase, atkT: 0.6, seq: 0, eT: 1.6, ea: null, down: 0, shield: false },
+      auto: { fighters: false, hero: false, train: false, workers: false },
+      maxTime: now,
       inv: { items: {}, skins: {} },
       equip: { waffe: null, banner: null, talisman: null, ranzen: null },
       wear: { hero: 'classic' },
       gacha: { pity: 0, gumRun: 0 },
       wheel: { next: 0 },
       story: { seen: {} },
-      settings: { sound: true, music: true, sci: false, buy: 1, theme: 'auto' },
+      settings: { sound: true, music: true, sci: false, buy: 1, theme: 'auto', autoEquip: true, autoSkills: true,
+        gfx: 'auto', fx: 1, shake: true, numbers: true, fps: 60, eco: false, haptics: true, musicVol: 0.8, sfxVol: 0.9 },
       combo: 0, comboT: 0,
       buffs: { frenzy: 0, clickstorm: 0 },
       plane: null, planeIn: B.planeFirst,
       daily: { day: '', streak: 0 },
       hints: {},
       lastTick: now, created: now, savedAt: 0,
-      _ev: [], _clone: 0, _achTimer: 0, _ac: 0, _gear: null
+      _ev: [], _clone: 0, _achTimer: 0, _ac: 0, _gear: null, _autoT: 0
     };
     for (const f of D.fighters) s.fighters[f.id] = 0;
     for (const w of D.workers) s.workers[w.id] = 0;
@@ -97,11 +103,15 @@
     } else {
       const mobs = zoneOf(s.stage).mobs;
       info = { type: mobs[seed % mobs.length], mega: false, name: '' };
+      if (s.maxStage >= B.eliteFrom && Math.random() < B.eliteChance + 0.03 * tr(s, 'p_elite')) {
+        info.elite = true; info.name = 'Elite'; hp = clampNum(hp * B.eliteHp);
+      }
     }
-    s.enemy = { hp, maxHp: hp, boss, seed, type: info.type, mega: info.mega, name: info.name };
+    s.enemy = { hp, maxHp: hp, boss, seed, type: info.type, mega: info.mega, name: info.name, elite: !!info.elite, ph2: false, ph3: false };
+    if (s.cb) { s.cb.ea = null; s.cb.eT = 1.1 + Math.random() * 0.6; if (boss) s.cb.shield = tr(s, 'p_revive') > 0; }
     s.bossTime = boss ? bossDuration(s) : 0;
     s.spawnTimer = 0;
-    emit(s, { t: 'spawn', boss, mega: info.mega, type: info.type, name: info.name });
+    emit(s, { t: 'spawn', boss, mega: info.mega, type: info.type, name: info.name, elite: !!info.elite });
   }
 
   /* ---------- Multiplikatoren ---------- */
@@ -112,15 +122,16 @@
     return (1 + B.soulBonus * s.souls) * Math.pow(B.levelBonus, s.level - 1) * (1 + B.achBonus * s._ac);
   }
   function buff(s, id, now) { return now != null && s.buffs[id] > now; }
+  function tr(s, id) { return (s.tree && s.tree[id]) || 0; }
   function gear(s) { return s._gear || recalcGear(s); }
   function dpsMult(s, now) {
     const g = gear(s);
     return globalMult(s) * (1 + 0.1 * s.talents.tactics) * (active(s, 'rage', now) ? 2 : 1) * (buff(s, 'frenzy', now) ? 3 : 1) *
-      (1 + g.dps / 100) * (1 + 0.01 * (g.nItems + g.nSkins));
+      (1 + g.dps / 100) * (1 + 0.01 * (g.nItems + g.nSkins)) * (1 + 0.5 * tr(s, 'p_dps'));
   }
   function goldMult(s, now) {
     const g = gear(s);
-    return globalMult(s) * (1 + 0.1 * s.talents.greed) * (active(s, 'goldrush', now) ? 3 : 1) * (1 + g.gold / 100) * (1 + 0.01 * g.nItems);
+    return globalMult(s) * (1 + 0.1 * s.talents.greed) * (active(s, 'goldrush', now) ? 3 : 1) * (1 + g.gold / 100) * (1 + 0.01 * g.nItems) * (1 + 0.5 * tr(s, 'p_gold'));
   }
   function fame(s) { return Math.pow(B.fameGrowth, s.maxStage - 1); }
 
@@ -137,11 +148,35 @@
   function heroBaseDmg(lvl) { return lvl * Math.pow(2, Math.floor(lvl / 25)); }
   function clickSynergy(s) { return 0.01 * s.talents.synergy + 0.01 * Math.floor(s.hero / 25); }
   function comboMult(s) { return 1 + Math.min(s.combo, B.comboMax) / B.comboMax; }
-  function clickDamage(s, now) {
+  // Grundschaden eines Heldentreffers (automatisch oder per Klick)
+  function heroDmgBase(s, now) {
     const base = heroBaseDmg(s.hero) * (1 + 0.25 * s.talents.power) * globalMult(s) * (active(s, 'rage', now) ? 2 : 1);
-    return clampNum((base + totalDps(s, now) * clickSynergy(s)) * comboMult(s) * (buff(s, 'clickstorm', now) ? 5 : 1) * (1 + gear(s).click / 100));
+    return clampNum((base + totalDps(s, now) * clickSynergy(s)) * (1 + gear(s).click / 100) * (1 + 0.5 * tr(s, 'p_dps')) * weapon(s).dmg);
   }
-  function critChance(s) { return Math.min(0.9, B.critBase + 0.02 * s.talents.precision + gear(s).crit / 100); }
+  // Klick-Schaden: Heldentreffer mit Combo und Klicksturm
+  function clickDamage(s, now) {
+    return clampNum(heroDmgBase(s, now) * comboMult(s) * (buff(s, 'clickstorm', now) ? 5 : 1));
+  }
+  function critChance(s) { return Math.min(0.9, B.critBase + 0.02 * s.talents.precision + gear(s).crit / 100 + 0.03 * tr(s, 'p_crit')); }
+  /* ---------- Heldenwerte ---------- */
+  function weaponId(s) { return C.weaponOf[s.equip.waffe] || 'fist'; }
+  function weapon(s) { return C.weapons[weaponId(s)]; }
+  function heroMaxHp(s) { return clampNum(B.heroHpBase * (1 + s.vit) * Math.pow(2, Math.floor(s.vit / 25)) * (1 + 0.4 * tr(s, 'p_hp')) * Math.pow(1.02, s.level - 1)); }
+  function armorPct(s) { return B.armorMax * s.armor / (s.armor + B.armorHalf); }
+  function atkSpeed(s, now) { return Math.min(B.heroAtkSpeedMax, B.heroAtkSpeed * (1 + B.tempoStep * s.tempo) * (1 + 0.04 * s.talents.swift) * weapon(s).speed * (active(s, 'rage', now) ? 1.5 : 1)); }
+  function dodgeChance(s) { return Math.min(0.6, B.dodgeBase + 0.02 * s.talents.reflex + 0.03 * tr(s, 'p_dodge')); }
+  function blockChance(s) { return Math.min(0.6, B.blockBase + 0.03 * s.talents.bulwark); }
+  function counterChance(s) { return Math.min(0.8, B.counterBase + 0.04 * s.talents.riposte); }
+  function lifesteal(s) { return 0.01 * s.talents.vampire; }
+  function enemyDmg(s, e, special) {
+    const st = s.stage;
+    let d = B.eDmgBase * Math.pow(B.eDmgGrowth, st - 1) * earlyHpMult(st);
+    if (e.boss) d *= B.bossDmgMult * (e.mega ? 1.3 : 1);
+    if (e.elite) d *= 2;
+    if (special) d *= B.specialMult;
+    if (e.ph2) d *= 1.15;
+    return clampNum(d);
+  }
   function critMult(s) { return B.critMultBase + 0.5 * s.talents.force + gear(s).critdmg; }
   function comboWindow(s) { return B.comboWindow + gear(s).combo; }
 
@@ -192,6 +227,21 @@
     return { n, cost: geoCost(B.heroBaseCost, B.heroCostGrowth, s.hero - 1, n) };
   }
 
+  const TRAIN = { vit: ['vitBaseCost', 'vitCostGrowth'], armor: ['armorBaseCost', 'armorCostGrowth'], tempo: ['tempoBaseCost', 'tempoCostGrowth'] };
+  function trainPrice(s, k, mode) {
+    const [b, g] = TRAIN[k];
+    const n = resolveAmount(B[b], B[g], s[k], s.gold, mode);
+    return { n, cost: geoCost(B[b], B[g], s[k], n) };
+  }
+  function buyTrain(s, k, mode) {
+    const p = trainPrice(s, k, mode);
+    if (p.n <= 0 || s.gold < p.cost) return false;
+    const before = s[k], oldMax = heroMaxHp(s);
+    s.gold -= p.cost; s[k] += p.n;
+    if (k === 'vit') s.cb.hp += heroMaxHp(s) - oldMax;
+    emit(s, { t: 'buy', kind: 'train', id: k, milestone: k === 'vit' && Math.floor(s[k] / 25) > Math.floor(before / 25) });
+    return true;
+  }
   function buyFighter(s, id, mode) {
     const p = fighterPrice(s, id, mode);
     if (p.n <= 0 || s.gold < p.cost) return false;
@@ -247,16 +297,20 @@
     if (!e || s.spawnTimer > 0 || e.hp <= 0) return false;
     e.hp -= amount;
     if (e.hp <= 0) { killEnemy(s, now); return true; }
+    if (e.boss && !e.ph2 && e.hp < e.maxHp * 0.5) { e.ph2 = true; emit(s, { t: 'phase', n: 2 }); }
+    if (e.mega && !e.ph3 && e.hp < e.maxHp * 0.2) { e.ph3 = true; emit(s, { t: 'phase', n: 3 }); }
     return false;
   }
 
   function killEnemy(s, now) {
     const e = s.enemy;
     e.hp = 0;
-    const g = clampNum(e.maxHp * B.goldPerHp * earlyGoldMult(s.stage) * goldMult(s, now));
+    const g = clampNum(e.maxHp * B.goldPerHp * earlyGoldMult(s.stage) * goldMult(s, now) * (e.elite ? B.eliteGold : 1));
     addGold(s, g);
-    addXp(s, xpFor(s.stage, e.boss) * (e.mega ? 3 : 1));
+    addXp(s, xpFor(s.stage, e.boss) * (e.mega ? 3 : e.elite ? 3 : 1));
     s.stats.kills++;
+    if (e.elite) s.stats.elites++;
+    if (s.cb) { s.cb.ea = null; s.cb.eT = 1.0 + Math.random() * 0.5; s.cb.hp = Math.min(heroMaxHp(s), s.cb.hp + heroMaxHp(s) * (e.boss ? 0.5 : 0.08)); }
     if (e.boss) {
       s.stats.bossKills++;
       if (e.type === 'dragon') s.stats.dragons++;
@@ -264,7 +318,14 @@
     }
     emit(s, { t: 'kill', gold: g, boss: e.boss, mega: e.mega, type: e.type, seed: e.seed });
     if (e.boss) openChest(s, g, e.mega);
-    if (e.boss && s.stage >= s.maxStage) addStars(s, e.mega ? 5 : 1, 'boss');
+    if (e.boss && s.stage >= s.maxStage) addStars(s, (e.mega ? 5 : 1) + tr(s, 'p_stars'), 'boss');
+    const dropP = e.mega ? 1 : e.boss ? B.dropBoss : e.elite ? B.dropElite + 0.1 * tr(s, 'p_elite') : 0;
+    if (dropP && Math.random() < dropP) {
+      const res = grant(s, Math.max(e.mega ? 2 : 0, rollRarity(B.dropRates)), false);
+      s.stats.drops++;
+      recalcGear(s);
+      emit(s, { t: 'drop', res, boss: e.boss, elite: e.elite });
+    }
 
     if (s.stage >= s.maxStage) {
       s.kills++;
@@ -324,7 +385,7 @@
       if (s.combo > s.stats.maxCombo) s.stats.maxCombo = s.combo;
       if (s.combo === 10 || s.combo % 25 === 0) emit(s, { t: 'combo', n: s.combo });
     }
-    if (!s.enemy || s.spawnTimer > 0 || s.enemy.hp <= 0) { emit(s, { t: 'tap', dmg: 0, crit: false, auto: !!auto }); return 0; }
+    if (!s.enemy || s.spawnTimer > 0 || s.enemy.hp <= 0 || (s.cb && s.cb.down > 0 && !auto)) { emit(s, { t: 'tap', dmg: 0, crit: false, auto: !!auto }); return 0; }
     let dmg = clickDamage(s, now);
     const crit = Math.random() < critChance(s);
     if (crit) { dmg = clampNum(dmg * critMult(s)); s.stats.crits++; }
@@ -387,15 +448,149 @@
         const dps = totalDps(s, now);
         if (dps > 0) damage(s, dps * dt, now);
       }
+      if (s.spawnTimer <= 0 && s.enemy && s.enemy.hp > 0) combatTick(s, dt, now);
       if (s.spawnTimer <= 0 && s.enemy.boss && s.enemy.hp > 0) {
         s.bossTime -= dt;
         if (s.bossTime <= 0) bossFail(s);
       }
     }
+    heroTick(s, dt);
+    if (tr(s, 'p_autoskill') && s.settings.autoSkills && (s._autoT += dt) >= 1) { s._autoT = 0; autoSkills(s, now); }
 
     s._achTimer += dt;
     if (s._achTimer >= 1) { s._achTimer = 0; checkAchievements(s); }
   }
+
+  /* ---------- Auto-Kampf ---------- */
+  // Regeneration und Wiederbelebung laufen immer
+  function heroTick(s, dt) {
+    const c = s.cb, mx = heroMaxHp(s);
+    if (c.down > 0) {
+      c.down -= dt;
+      if (c.down <= 0) { c.down = 0; c.hp = mx; emit(s, { t: 'revive' }); }
+      return;
+    }
+    if (c.hp > mx) c.hp = mx;
+    c.hp = Math.min(mx, c.hp + mx * B.regen * dt);
+  }
+  function combatTick(s, dt, now) {
+    const c = s.cb;
+    if (c.down > 0) return;
+    // Held greift automatisch an
+    c.atkT -= dt;
+    if (c.atkT <= 0) {
+      c.atkT += 1 / atkSpeed(s, now);
+      if (c.atkT < 0) c.atkT = 0;
+      heroStrike(s, now);
+      if (s.spawnTimer > 0 || !s.enemy || s.enemy.hp <= 0) return;
+    }
+    // Gegner holt aus und trifft
+    if (!c.ea) {
+      c.eT -= dt;
+      if (c.eT <= 0) startEnemyAttack(s, now);
+    } else {
+      c.ea.t += dt;
+      if (c.ea.t >= c.ea.dur) resolveEnemyAttack(s, now);
+    }
+  }
+  function heroStrike(s, now) {
+    const c = s.cb, w = weapon(s);
+    const seq = c.seq % w.combo.length, heavy = seq === w.combo.length - 1;
+    let dmg = heroDmgBase(s, now) * (heavy ? 2.5 : 1);
+    const crit = Math.random() < critChance(s);
+    if (crit) { dmg = clampNum(dmg * critMult(s)); s.stats.crits++; }
+    if (dmg > s.stats.maxHit) s.stats.maxHit = dmg;
+    c.seq++;
+    emit(s, { t: 'hstrike', dmg, crit, heavy, move: w.combo[seq], weapon: weaponId(s), speed: atkSpeed(s, now) });
+    const ls = lifesteal(s);
+    if (ls > 0) c.hp = Math.min(heroMaxHp(s), c.hp + heroMaxHp(s) * ls * 0.4);
+    damage(s, dmg, now);
+  }
+  function startEnemyAttack(s, now) {
+    const e = s.enemy, c = s.cb;
+    const special = e.boss && Math.random() < (e.ph2 ? 0.35 : 0.2);
+    const dodge = dodgeChance(s), block = blockChance(s);
+    let out = 'hit';
+    if (Math.random() < dodge) out = Math.random() < 0.25 + 0.02 * s.talents.reflex ? 'perfect' : 'dodge';
+    else if (Math.random() < block) out = !special && Math.random() < B.parryShare ? 'parry' : 'block';
+    const dur = special ? 0.95 : e.boss ? 0.6 : 0.45;
+    c.ea = { t: 0, dur, out, special, dmg: enemyDmg(s, e, special) };
+    emit(s, { t: 'eatk', out, dur, special, boss: e.boss });
+  }
+  function resolveEnemyAttack(s, now) {
+    const c = s.cb, a = c.ea, e = s.enemy;
+    c.ea = null;
+    c.eT = (e.boss ? B.bossAtkEvery : B.eAtkEvery) * (0.85 + Math.random() * 0.3) / (e.ph2 ? 1.35 : 1) / (e.ph3 ? 1.2 : 1) * (e.elite ? 0.85 : 1);
+    let dmg = a.dmg * (1 - armorPct(s));
+    if (a.out === 'dodge' || a.out === 'perfect' || a.out === 'parry') dmg = 0;
+    else if (a.out === 'block') dmg *= 1 - B.blockReduce;
+    if (a.out === 'dodge' || a.out === 'perfect') s.stats.dodges++;
+    if (a.out === 'block') s.stats.blocks++;
+    if (a.out === 'parry') s.stats.parries++;
+    c.hp -= dmg;
+    emit(s, { t: 'ehit', out: a.out, dmg, special: a.special, boss: e.boss });
+    if (c.hp <= 0) { heroKo(s); return; }
+    const counter = a.out === 'parry' || a.out === 'perfect' || ((a.out === 'dodge' || a.out === 'block') && Math.random() < counterChance(s));
+    if (counter) {
+      let cd = heroDmgBase(s, now) * 1.8;
+      const crit = Math.random() < critChance(s);
+      if (crit) { cd = clampNum(cd * critMult(s)); s.stats.crits++; }
+      s.stats.counters++;
+      emit(s, { t: 'counter', dmg: cd, crit, from: a.out });
+      damage(s, cd, now);
+    }
+  }
+  function heroKo(s) {
+    const c = s.cb;
+    if (c.shield && s.enemy && s.enemy.boss) { c.shield = false; c.hp = heroMaxHp(s) * 0.3; emit(s, { t: 'shield' }); return; }
+    c.hp = 0; c.down = B.reviveTime; c.ea = null; c.atkT = 0.5;
+    s.stats.kos++;
+    emit(s, { t: 'ko' });
+    const e = s.enemy;
+    if (e && e.boss) bossFail(s);
+    else if (e) { e.hp = e.maxHp; emit(s, { t: 'eheal' }); }
+  }
+  function autoSkills(s, now) {
+    const e = s.enemy;
+    if (!e || s.spawnTimer > 0) return;
+    for (const k of D.skills) {
+      if (k.id === 'meteor' && !e.boss) continue;
+      if (skillState(s, k.id, now).ready) useSkill(s, k.id, now);
+    }
+  }
+  // Auto-Kauf: kauft das jeweils günstigste Upgrade der eingeschalteten Bereiche
+  function autoBuy(s) {
+    if (!tr(s, 'p_auto')) return 0;
+    let n = 0;
+    for (let guard = 0; guard < 40; guard++) {
+      let best = null;
+      const consider = (cost, fn) => { if (cost <= s.gold && (!best || cost < best.cost)) best = { cost, fn }; };
+      if (s.auto.fighters) D.fighters.forEach((f, i) => { if (s.fighters[f.id] > 0 || i === 0 || s.fighters[D.fighters[i - 1].id] > 0) consider(fighterPrice(s, f.id, 1).cost, () => buyFighter(s, f.id, 1)); });
+      if (s.auto.hero) consider(heroPrice(s, 1).cost, () => buyHero(s, 1));
+      if (s.auto.train) ['vit', 'armor', 'tempo'].forEach(k => consider(trainPrice(s, k, 1).cost, () => buyTrain(s, k, 1)));
+      if (s.auto.workers) D.workers.forEach((w, i) => { if (s.workers[w.id] > 0 || i === 0 || s.workers[D.workers[i - 1].id] > 0) consider(workerPrice(s, w.id, 1).cost, () => buyWorker(s, w.id, 1)); });
+      if (!best) break;
+      best.fn(); n++;
+    }
+    return n;
+  }
+  /* ---------- Seelenbaum ---------- */
+  function nodeCost(node, rank) { return node.cost * (rank + 1); }
+  function nodeState(s, id) {
+    const node = C.tree.find(x => x.id === id), rank = tr(s, id);
+    const reqOk = !node.req || tr(s, node.req) > 0;
+    return { node, rank, maxed: rank >= node.max, reqOk, cost: nodeCost(node, rank), can: reqOk && rank < node.max && s.crystals >= nodeCost(node, rank) };
+  }
+  function buyNode(s, id) {
+    const st = nodeState(s, id);
+    if (!st.can) return false;
+    s.crystals -= st.cost; s.tree[id] = st.rank + 1;
+    if (id === 'p_hp') s.cb.hp = heroMaxHp(s);
+    emit(s, { t: 'node', id });
+    checkAchievements(s);
+    return true;
+  }
+  function crystalsFor(gain) { return gain > 0 ? Math.max(1, Math.floor(Math.sqrt(gain) / 2)) : 0; }
 
   function checkAchievements(s) {
     let changed = false;
@@ -503,9 +698,11 @@
     const lvl = s.inv.items[it.id] || 0;
     if (!lvl) {
       s.inv.items[it.id] = 1;
-      if (!s.equip[it.slot]) s.equip[it.slot] = it.id;
-      else { const cur = IT[s.equip[it.slot]]; if (cur && RI[cur.rarity] < ri) s.equip[it.slot] = it.id; }
-      return { kind: 'item', id: it.id, rank: ri, isNew: true, lvl: 1 };
+      const curId = s.equip[it.slot], cur = IT[curId];
+      const better = !cur || itemValue(it, 1) > itemValue(cur, s.inv.items[curId] || 1) && itemStatId(it) === itemStatId(cur) || RI[cur.rarity] < ri;
+      let equipped = false;
+      if (!cur || (better && s.settings.autoEquip !== false)) { s.equip[it.slot] = it.id; equipped = true; }
+      return { kind: 'item', id: it.id, rank: ri, isNew: true, lvl: 1, cmp: cur ? cur.id : null, better, equipped };
     }
     if (lvl < rar.maxLvl) { s.inv.items[it.id] = lvl + 1; return { kind: 'item', id: it.id, rank: ri, up: true, lvl: lvl + 1 }; }
     addStars(s, rar.dup, 'dup');
@@ -575,22 +772,23 @@
   function idleCombat(s) {
     let st = s.stage;
     if (isBoss(st)) st = Math.max(1, st - 1);
-    const dps = totalDps(s, null);
+    const dps = totalDps(s, null) + heroDmgBase(s, null) * atkSpeed(s, null);
     if (dps <= 0) return { rate: 0, gold: 0, xp: 0, stage: st };
     const hp = enemyHp(st, isBoss(st));
     const rate = 1 / (hp / dps + B.respawn);
     return { rate, gold: rate * bounty(st, isBoss(st)) * goldMult(s, null), xp: rate * xpFor(st, isBoss(st)), stage: st };
   }
   function offlineEff(s) { return Math.min(1.5, B.offlineBaseEff + 0.05 * s.talents.dreamer + gear(s).offline / 100); }
-  function offlineCap() { return B.offlineCapHours * 3600; }
+  function offlineCap(s) { return (B.offlineCapHours + 3 * (s ? tr(s, 'p_offline') : 0)) * 3600; }
   function computeOffline(s, seconds) {
-    const t = Math.min(seconds, offlineCap());
+    const t = Math.min(seconds, offlineCap(s));
     const eff = offlineEff(s);
     const ic = idleCombat(s);
     const gold = clampNum((workerIncome(s, null) + ic.gold) * t * eff);
     const kills = Math.floor(ic.rate * t * eff);
     const xp = Math.floor(ic.xp * t * eff);
-    return { seconds, used: t, eff, gold, kills, xp };
+    const loot = Math.min(8, Math.floor(t / 1800));
+    return { seconds, used: t, eff, gold, kills, xp, loot };
   }
   function applyOffline(s, off) {
     const lvl = s.level;
@@ -598,6 +796,9 @@
     addXp(s, off.xp);
     s.stats.kills += off.kills;
     s.stats.offlineGold += off.gold;
+    off.items = [];
+    for (let i = 0; i < (off.loot || 0); i++) off.items.push(grant(s, rollRarity(B.dropRates), false));
+    if (off.items.length) recalcGear(s);
     checkAchievements(s);
     return s.level - lvl;
   }
@@ -611,11 +812,15 @@
   function ascend(s, now) {
     const gain = soulsForAscend(s);
     if (gain <= 0) return 0;
+    const cry = crystalsFor(gain);
+    s.crystals += cry; s.stats.crystalsEarned += cry;
     s.souls += gain;
     s.stats.soulsEarned += gain;
     s.ascensions++;
     s.gold = 0; s.runGold = 0;
-    s.stage = 1; s.maxStage = 1; s.kills = 0; s.autoAdvance = true;
+    s.stage = 1 + 5 * tr(s, 'p_start'); s.maxStage = s.stage; s.kills = 0; s.autoAdvance = true;
+    s.vit = 0; s.armor = 0; s.tempo = 0;
+    s.cb = { hp: B.heroHpBase, atkT: 0.6, seq: 0, eT: 1.6, ea: null, down: 0, shield: false };
     s.hero = 1;
     for (const f of D.fighters) s.fighters[f.id] = 0;
     for (const w of D.workers) s.workers[w.id] = 0;
@@ -623,7 +828,7 @@
     s.buffs = { frenzy: 0, clickstorm: 0 }; s.combo = 0; s.comboT = 0;
     s.gacha.gumRun = 0;
     addStars(s, 10, 'ascend');
-    emit(s, { t: 'ascend', gain });
+    emit(s, { t: 'ascend', gain, crystals: cry });
     spawnEnemy(s);
     checkAchievements(s);
     return gain;
@@ -664,6 +869,8 @@
 
   const ENGINE = {
     D, B, F, W, T, K, SAVE_VERSION,
+    tr, heroDmgBase, heroMaxHp, armorPct, atkSpeed, dodgeChance, blockChance, counterChance, lifesteal, enemyDmg, weaponId, weapon,
+    trainPrice, buyTrain, autoBuy, nodeState, buyNode, crystalsFor, heroKo,
     C, RAR, RI, IT, addStars, itemValue, itemStatId, recalcGear, gear, equipItem, wearSkin, pullPack, pullGum, gumPrice, spinWheel, wheelReady, comboWindow,
     newState, emit, isBoss, isMega, bossInfo, zoneIndex, buff, comboMult, openChest, incomePerSec, catchPlane, claimDaily, dayKey,
     enemyHp, bounty, xpFor, xpNeed, bossDuration, zoneOf,

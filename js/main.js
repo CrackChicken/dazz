@@ -56,7 +56,10 @@
     if (state.settings.music === undefined) state.settings.music = true;
     AU.setSfx(state.settings.sound);
     AU.setMusic(state.settings.music);
+    AU.setVolumes(state.settings.musicVol != null ? state.settings.musicVol : 0.8, state.settings.sfxVol != null ? state.settings.sfxVol : 0.9);
   }
+  // Haptik: Vibration, wo der Browser sie erlaubt (iOS Safari bietet Webseiten keine Vibration)
+  function haptic(p) { try { if (state.settings.haptics && navigator.vibrate) navigator.vibrate(p); } catch (e) { /* optional */ } }
   function wantTrack() {
     const e = state.enemy;
     return e && e.boss && e.hp > 0 ? 'boss' : 'z' + E.zoneIndex(state.stage);
@@ -138,12 +141,20 @@
 
   function sound(ev) {
     switch (ev.t) {
-      case 'tap': if (ev.dmg > 0) AU.play('hit', ev.crit); break;
+      case 'tap': if (ev.dmg > 0) AU.play('swing', { w: 'fist', crit: ev.crit }); break;
       case 'kill': AU.play('kill'); break;
       case 'spawn': if (ev.boss) AU.play('roar'); break;
       case 'plane': AU.play('plane'); break;
       case 'planeCatch': AU.play('planeCatch'); break;
       case 'combo': if (ev.n >= 25) AU.play('combo', ev.n); break;
+      case 'hstrike': AU.play('swing', { w: ev.weapon, heavy: ev.heavy, crit: ev.crit }); break;
+      case 'eatk': if (ev.special) AU.play('warn'); break;
+      case 'ehit': AU.play(ev.out === 'hit' ? 'hurt' : ev.out === 'block' ? 'block' : ev.out === 'parry' ? 'parry' : 'dodge'); if (ev.out === 'hit' && ev.special) haptic(30); break;
+      case 'counter': AU.play('counter'); break;
+      case 'ko': AU.play('ko'); haptic([60, 40, 60]); break;
+      case 'revive': case 'shield': AU.play('revive'); break;
+      case 'phase': AU.play('roar'); haptic(50); break;
+      case 'drop': AU.play('reveal', ev.res.rank); if (ev.res.rank >= 3) haptic([30, 30, 60]); break;
       case 'level': AU.play('level'); break;
       case 'skill': AU.play('skill'); break;
       case 'meteor': AU.play('meteor'); break;

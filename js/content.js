@@ -4,9 +4,9 @@
 
   // Seltenheiten (Reihenfolge = Rang). color = Filzstift-Name aus dem CSS (pencil = Grau).
   const rarities = [
-    { id: 'common',    name: 'Gewöhnlich',  color: 'pencil', maxLvl: 5,  dup: 1,  pct: 10,  rank: 0 },
-    { id: 'rare',      name: 'Selten',      color: 'green',  maxLvl: 6,  dup: 2,  pct: 20,  rank: 1 },
-    { id: 'vrare',     name: 'Sehr selten', color: 'blue',   maxLvl: 7,  dup: 4,  pct: 40,  rank: 2 },
+    { id: 'common',    name: 'Normal',  color: 'pencil', maxLvl: 5,  dup: 1,  pct: 10,  rank: 0 },
+    { id: 'rare',      name: 'Ungewöhnlich',      color: 'green',  maxLvl: 6,  dup: 2,  pct: 20,  rank: 1 },
+    { id: 'vrare',     name: 'Selten', color: 'blue',   maxLvl: 7,  dup: 4,  pct: 40,  rank: 2 },
     { id: 'epic',      name: 'Episch',      color: 'purple', maxLvl: 8,  dup: 8,  pct: 80,  rank: 3 },
     { id: 'legendary', name: 'Legendär',    color: 'orange', maxLvl: 10, dup: 20, pct: 150, rank: 4 },
     { id: 'mythic',    name: 'Mythisch',    color: 'red',    maxLvl: 10, dup: 50, pct: 300, rank: 5 }
@@ -148,7 +148,60 @@
     ] }
   ];
 
-  const CONTENT = { rarities, special, slots, items, heroSkins, fighterStyles, machines, wheel, story };
+  // Waffenart des Helden je nach angelegter Waffe: Tempo- und Schadensfaktor, Kombo-Folge
+  const weapons = {
+    fist:   { name: 'Fäuste',   speed: 1.0,  dmg: 1.0,  combo: ['jab', 'cross', 'hook', 'upper'] },
+    sword:  { name: 'Lineal',   speed: 1.0,  dmg: 1.05, combo: ['slashDown', 'slashUp', 'thrust', 'spin'] },
+    dagger: { name: 'Klinge',   speed: 1.3,  dmg: 0.85, combo: ['stab', 'stab2', 'stab', 'flurry'] },
+    axe:    { name: 'Axt',      speed: 0.75, dmg: 1.45, combo: ['overhead', 'side', 'overhead', 'slam'] },
+    dual:   { name: 'Doppel',   speed: 1.2,  dmg: 0.95, combo: ['slashDown', 'slashUp', 'slashDown', 'spin'] },
+    rapier: { name: 'Füller',   speed: 1.1,  dmg: 1.1,  combo: ['thrust', 'thrust', 'thrust', 'lunge'] },
+    magic:  { name: 'Magie',    speed: 1.0,  dmg: 1.25, combo: ['cast', 'cast', 'cast', 'beam'] }
+  };
+  const weaponOf = { lineal: 'sword', spitzer: 'dagger', geodreieck: 'axe', marker: 'dual', fueller: 'rapier', erster: 'magic' };
+
+  // Seelenbaum: dauerhafte Verbesserungen für Tintenkristalle (aus jedem Aufstieg)
+  const tree = [
+    { id: 'p_dps',     branch: 'Kampf',         name: 'Scharfe Feder',      max: 10, cost: 1, desc: '+50 % Schaden (Held und Truppe)' },
+    { id: 'p_crit',    branch: 'Kampf',         name: 'Tintenklinge',       max: 5,  cost: 2, req: 'p_dps', desc: '+3 % Krit-Chance' },
+    { id: 'p_autoskill', branch: 'Kampf',       name: 'Kampfinstinkt',      max: 1,  cost: 4, req: 'p_crit', desc: 'Fähigkeiten werden automatisch eingesetzt' },
+    { id: 'p_gold',    branch: 'Wohlstand',     name: 'Goldader',           max: 10, cost: 1, desc: '+50 % Gold' },
+    { id: 'p_start',   branch: 'Wohlstand',     name: 'Vorsprung',          max: 5,  cost: 2, req: 'p_gold', desc: 'Neuer Lauf startet 5 Stufen weiter' },
+    { id: 'p_offline', branch: 'Wohlstand',     name: 'Nachtschicht',       max: 4,  cost: 2, req: 'p_start', desc: '+3 h Offline-Zeit' },
+    { id: 'p_hp',      branch: 'Ausdauer',      name: 'Dickes Papier',      max: 10, cost: 1, desc: '+40 % Lebenspunkte' },
+    { id: 'p_dodge',   branch: 'Ausdauer',      name: 'Flinker Strich',     max: 5,  cost: 2, req: 'p_hp', desc: '+3 % Ausweichen' },
+    { id: 'p_revive',  branch: 'Ausdauer',      name: 'Radiergummi-Schild', max: 1,  cost: 4, req: 'p_dodge', desc: 'Einmal pro Bosskampf: K.O. abwenden' },
+    { id: 'p_auto',    branch: 'Meisterschaft', name: 'Fleißige Hände',     max: 1,  cost: 2, desc: 'Schaltet Auto-Kauf frei' },
+    { id: 'p_stars',   branch: 'Meisterschaft', name: 'Lehrerliebling',     max: 5,  cost: 2, req: 'p_auto', desc: '+1 Sternchen pro Boss' },
+    { id: 'p_elite',   branch: 'Meisterschaft', name: 'Elitejagd',          max: 3,  cost: 3, req: 'p_stars', desc: 'Elitegegner häufiger, bessere Beute' }
+  ];
+
+  // Titel: freigeschaltet durch Erfolge, rein kosmetisch
+  const titles = [
+    { id: 'none',      name: 'Kritzler',            ach: null },
+    { id: 'lehrling',  name: 'Heftrand-Lehrling',   ach: 'lvl10' },
+    { id: 'boss',      name: 'Bossjäger',           ach: 'boss10' },
+    { id: 'drache',    name: 'Drachentöter',        ach: 'dragon1' },
+    { id: 'flow',      name: 'Im Flow',             ach: 'combo50' },
+    { id: 'fecht',     name: 'Fechtmeister',        ach: 'parry50' },
+    { id: 'geist',     name: 'Unberührbar',         ach: 'dodge100' },
+    { id: 'reich',     name: 'Tintenbaron',         ach: 'gold1t' },
+    { id: 'legende',   name: 'Pausenhof-Legende',   ach: 'lvl50' },
+    { id: 'ewig',      name: 'Ewiger Strich',       ach: 'asc10' }
+  ];
+
+  // Premium-Shop: nur Vorschau, alles „Bald verfügbar“, keine Preise, keine Spielvorteile
+  const shop = [
+    { cat: 'Charakter-Skins', items: [{ name: 'Astronaut', desc: 'Raumanzug mit Goldvisier' }, { name: 'Ninja-Meister', desc: 'Schwarzer Anzug, rote Schärpe' }, { name: 'Roboter-Toni', desc: 'Aus Lineal und Zirkel' }] },
+    { cat: 'Waffen-Skins', items: [{ name: 'Regenbogen-Lineal', desc: 'Hinterlässt farbige Spuren' }, { name: 'Leuchtstift', desc: 'Neonklinge mit Glühen' }] },
+    { cat: 'Spezialeffekte', items: [{ name: 'Sternschnuppen-Spur', desc: 'Sterne bei jedem Treffer' }, { name: 'Tinten-Explosion', desc: 'Klecks-Effekt für Krits' }] },
+    { cat: 'Angriffsanimationen', items: [{ name: 'Kung-Fu-Stil', desc: 'Neue Schlagfolge für Fäuste' }, { name: 'Tanzschritt-Ausweichen', desc: 'Pirouette statt Sprung' }] },
+    { cat: 'Begleiter', items: [{ name: 'Papierflieger-Pilot', desc: 'Fliegt neben dem Helden' }, { name: 'Radiergummi-Hund', desc: 'Wedelt bei jedem Sieg' }] },
+    { cat: 'Profil', items: [{ name: 'Rahmen „Goldheft“', desc: 'Goldener Profilrahmen' }, { name: 'Titel-Farben', desc: 'Bunte Titel im Profil' }] },
+    { cat: 'Erweiterungen', items: [{ name: 'Kapitel-Paket: Sportfest', desc: 'Neue Welt mit eigenen Bossen' }] }
+  ];
+
+  const CONTENT = { rarities, special, slots, items, heroSkins, fighterStyles, machines, wheel, story, weapons, weaponOf, tree, titles, shop };
   if (typeof module !== 'undefined' && module.exports) module.exports = CONTENT;
   else root.KK_CONTENT = CONTENT;
 })(typeof window !== 'undefined' ? window : globalThis);

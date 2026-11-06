@@ -46,6 +46,23 @@
     critMultBase: 3,
     achBonus: 0.02,
 
+    // Auto-Kampf: Held
+    heroHpBase: 60,
+    heroAtkSpeed: 1.25,     // automatische Angriffe pro Sekunde
+    heroAtkSpeedMax: 5,
+    vitBaseCost: 15, vitCostGrowth: 1.085,
+    armorBaseCost: 40, armorCostGrowth: 1.13, armorMax: 0.75, armorHalf: 30,
+    tempoBaseCost: 60, tempoCostGrowth: 1.16, tempoStep: 0.05,
+    regen: 0.03,            // LP-Regeneration pro Sekunde (Anteil)
+    reviveTime: 2.5,
+    dodgeBase: 0.05, blockBase: 0.05, counterBase: 0.05, parryShare: 0.3, blockReduce: 0.65,
+    // Auto-Kampf: Gegner
+    eDmgBase: 1.6, eDmgGrowth: 1.21, bossDmgMult: 3.2, specialMult: 2.4,
+    eAtkEvery: 1.9, bossAtkEvery: 1.4,
+    eliteFrom: 8, eliteChance: 0.06, eliteHp: 4, eliteGold: 1.5,
+    dropBoss: 0.2, dropElite: 0.25,
+    dropRates: [55, 28, 12, 4, 0.9, 0.1],
+
     comboWindow: 1.0,       // Sekunden zwischen Taps, damit die Combo hält
     comboMax: 150,          // Combo 150 = doppelter Klickschaden
     planeFirst: 40,         // erster Goldflieger nach 40 s
@@ -97,7 +114,12 @@
     { id: 'force',    name: 'Wucht',        max: 20, desc: '+50 % Krit-Schaden' },
     { id: 'synergy',  name: 'Synergie',     max: 20, desc: 'Klicks verursachen +1 % deiner DPS' },
     { id: 'endurance',name: 'Ausdauer',     max: 10, desc: '+2 s Zeit gegen Bosse' },
-    { id: 'dreamer',  name: 'Träumer',      max: 10, desc: '+5 % Offline-Einkommen' }
+    { id: 'dreamer',  name: 'Träumer',      max: 10, desc: '+5 % Offline-Einkommen' },
+    { id: 'reflex',   name: 'Reflexe',      max: 20, desc: '+2 % Ausweichen' },
+    { id: 'bulwark',  name: 'Bollwerk',     max: 15, desc: '+3 % Blocken' },
+    { id: 'riposte',  name: 'Konter',       max: 15, desc: '+4 % Konterchance' },
+    { id: 'vampire',  name: 'Vampir',       max: 15, desc: 'Lebensraub: +1 % LP pro Treffer' },
+    { id: 'swift',    name: 'Flinkheit',    max: 25, desc: '+4 % Angriffstempo' }
   ];
 
   // Aktive Fähigkeiten, freigeschaltet über das Level.
@@ -169,7 +191,12 @@
     { id: 'asc1',     name: 'Wiedergeboren',      desc: 'Steige zum ersten Mal auf',     test: s => s.ascensions >= 1 },
     { id: 'asc5',     name: 'Kreislauf',          desc: 'Steige 5-mal auf',              test: s => s.ascensions >= 5 },
     { id: 'asc10',    name: 'Ewiger Strich',      desc: 'Steige 10-mal auf',             test: s => s.ascensions >= 10 },
-    { id: 'bigHit',   name: 'Volltreffer',        desc: 'Ein Treffer über 1 Mio.',       test: s => s.stats.maxHit >= 1e6 }
+    { id: 'bigHit',   name: 'Volltreffer',        desc: 'Ein Treffer über 1 Mio.',       test: s => s.stats.maxHit >= 1e6 },
+    { id: 'dodge100', name: 'Unberührbar',        desc: '100-mal ausgewichen',           test: s => s.stats.dodges >= 100 },
+    { id: 'parry50',  name: 'Fechtmeister',       desc: '50 Paraden',                    test: s => s.stats.parries >= 50 },
+    { id: 'counter100', name: 'Retourkutsche',    desc: '100 Konter',                    test: s => s.stats.counters >= 100 },
+    { id: 'elite25',  name: 'Elitejäger',         desc: '25 Elitegegner besiegt',        test: s => s.stats.elites >= 25 },
+    { id: 'tree10',   name: 'Wurzelwerk',         desc: '10 Ränge im Seelenbaum',        test: s => Object.values(s.tree || {}).reduce((a, b) => a + b, 0) >= 10 }
   ];
 
   const DATA = { BAL, fighters, workers, talents, skills, zones, bosses, megaBoss, achievements };
